@@ -1,0 +1,32 @@
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
+
+from fastapi import FastAPI
+
+from ingestion_api.app.api.routes import register_routes
+from ingestion_api.app.core.config import get_settings
+from ingestion_api.app.services.ingestion import IngestionService
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI) -> AsyncIterator[None]:
+    if not hasattr(app.state, "settings"):
+        app.state.settings = get_settings()
+
+    if not hasattr(app.state, "ingestion_service"):
+        app.state.ingestion_service = IngestionService()
+    yield
+
+
+def create_app() -> FastAPI:
+    created_app = FastAPI(
+        title="IngestionApi",
+        version="0.1.0",
+        summary="Ingest, normalize, chunk, and index approved documents and uploaded files.",
+        lifespan=lifespan,
+    )
+    register_routes(created_app)
+    return created_app
+
+
+app = create_app()

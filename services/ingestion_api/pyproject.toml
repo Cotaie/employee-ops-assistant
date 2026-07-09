@@ -1,0 +1,39 @@
+[project]
+name = "ingestion-api"
+version = "0.1.0"
+description = "IngestionApi service for Employee Ops Assistant."
+requires-python = ">=3.12"
+dependencies = [
+    "contracts",
+    "fastapi>=0.115.0,<1.0.0",
+    "pydantic-settings>=2.10.0,<3.0.0",
+    "uvicorn[standard]>=0.35.0,<1.0.0",
+]
+
+[dependency-groups]
+dev = [
+    "httpx>=0.28.0,<1.0.0",
+    "mypy>=1.17.0,<2.0.0",
+    "pytest>=8.4.0,<9.0.0",
+    "ruff>=0.12.0,<1.0.0",
+]
+
+[tool.uv.sources]
+contracts = { path = "../../libs/contracts", editable = true }
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B"]
+
+[tool.mypy]
+python_version = "3.12"
+strict = true
+mypy_path = ["src"]
+packages = ["ingestion_api"]
