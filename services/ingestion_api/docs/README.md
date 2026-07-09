@@ -1,0 +1,9 @@
+# Ingestion API Docs
+
+This folder is the placeholder for the Ingestion API service documentation.
+
+Planned docs:
+
+- [detail design](./detail-design.md)
+- testing guide
+- API notes for `POST /documents` and `POST /temporary-documents`

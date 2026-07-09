@@ -11,7 +11,7 @@
 ## 2. Interface Responsibilities
 
 - accept approved enterprise documents for ingestion
-- accept uploaded files selected for indexed analysis
+- accept temporary uploaded files selected for indexed analysis
 - normalize and chunk them
 - call `EmbeddingsApi`
 - persist chunk metadata and embeddings into the vector store
@@ -29,26 +29,32 @@ Output:
 
 - ingestion job or ingestion result
 
-### `POST /uploaded-documents`
+### `POST /temporary-documents`
 
 Input:
 
-- uploaded file metadata
+- temporary uploaded file metadata
 - content or content reference
 
 Output:
 
-- ingestion job or ingestion result for indexed file analysis
+- completed ingestion result for indexed file analysis
 
-### `DELETE /uploaded-documents/{uploaded_document_id}`
-
-Output:
-
-- deletion status for the temporary uploaded file and its derived indexed content
-
-### `GET /documents/{document_id}`
+### `GET /documents`
 
 Output:
 
-- ingestion metadata
-- ingestion status
+- document summaries filtered by `document_id`, `document_name`, or `status`
+
+### `DELETE /documents/{document_id}`
+
+Output:
+
+- deletion status for the target document and its derived indexed content
+
+### `PATCH /documents/{document_id}`
+
+Output:
+
+- updated document metadata
+- explicit update status
