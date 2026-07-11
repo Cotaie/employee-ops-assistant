@@ -1,0 +1,11 @@
+.git
+.agents
+.codex
+**/.venv
+**/.pytest_cache
+**/__pycache__
+**/.mypy_cache
+**/.ruff_cache
+**/*.pyc
+**/.env
+**/.local
