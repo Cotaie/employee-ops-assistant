@@ -1,0 +1,9 @@
+{
+  "python.defaultInterpreterPath": "${workspaceFolder}/.venv/bin/python",
+  "python.analysis.extraPaths": [
+    "${workspaceFolder}/libs/contracts/src",
+    "${workspaceFolder}/services/embeddings_api/src",
+    "${workspaceFolder}/services/ingestion_api/src"
+  ],
+  "python.terminal.activateEnvironment": true
+}

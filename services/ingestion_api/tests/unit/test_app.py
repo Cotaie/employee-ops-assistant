@@ -84,7 +84,17 @@ async def test_post_temporary_documents_uses_the_new_sync_route() -> None:
                 json=_temporary_document_payload(),
             )
 
-    assert response.status_code == 501
+    body = response.json()
+
+    assert response.status_code == 200
+    assert body["document_id"].startswith("temp_")
+    assert body["document_name"] == "Uploaded Benefits Form"
+    assert body["retention_mode"] == "temporary"
+    assert body["document_status"] == "active"
+    assert body["ingestion_status"] == "success"
+    assert body["chunk_count"] == 1
+    assert body["embedding_count"] == 0
+    assert body["warnings"] == []
 
 
 @pytest.mark.anyio

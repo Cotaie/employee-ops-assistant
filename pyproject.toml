@@ -1,0 +1,27 @@
+[project]
+name = "employee-ops-assistant-dev"
+version = "0.1.0"
+description = "Root development environment for the Employee Ops Assistant monorepo."
+requires-python = ">=3.12"
+dependencies = [
+    "contracts",
+    "embeddings-api",
+    "ingestion-api",
+    "unstructured>=0.24.1,<1.0.0",
+]
+
+[dependency-groups]
+dev = [
+    "httpx>=0.28.0,<1.0.0",
+    "mypy>=1.17.0,<2.0.0",
+    "pytest>=8.4.0,<9.0.0",
+    "ruff>=0.12.0,<1.0.0",
+]
+
+[tool.uv]
+package = false
+
+[tool.uv.sources]
+contracts = { path = "libs/contracts", editable = true }
+embeddings-api = { path = "services/embeddings_api", editable = true }
+ingestion-api = { path = "services/ingestion_api", editable = true }

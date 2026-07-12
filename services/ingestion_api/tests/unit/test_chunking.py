@@ -1,21 +1,33 @@
 import pytest
 
 from ingestion_api.app.services.chunking import ChunkingService
+from ingestion_api.app.services.profile_selector import ChunkingProfile
 
 
 def test_chunk_text_returns_single_chunk_for_short_content() -> None:
-    service = ChunkingService(chunk_size=50, chunk_overlap=10)
+    service = ChunkingService()
+    profile = ChunkingProfile(
+        strategy="plain_text_default",
+        chunk_size=50,
+        chunk_overlap=10,
+    )
 
-    chunks = service.chunk_text("Temporary document content.")
+    chunks = service.chunk_text("Temporary document content.", profile)
 
     assert chunks == ["Temporary document content."]
 
 
 def test_chunk_text_splits_long_content_into_multiple_chunks() -> None:
-    service = ChunkingService(chunk_size=20, chunk_overlap=5)
+    service = ChunkingService()
+    profile = ChunkingProfile(
+        strategy="plain_text_default",
+        chunk_size=20,
+        chunk_overlap=5,
+    )
 
     chunks = service.chunk_text(
-        "alpha beta gamma delta epsilon zeta eta theta iota kappa lambda"
+        "alpha beta gamma delta epsilon zeta eta theta iota kappa lambda",
+        profile,
     )
 
     assert len(chunks) > 1
@@ -24,17 +36,27 @@ def test_chunk_text_splits_long_content_into_multiple_chunks() -> None:
 
 
 def test_chunk_text_falls_back_to_hard_boundary_when_no_whitespace_exists() -> None:
-    service = ChunkingService(chunk_size=5, chunk_overlap=0)
+    service = ChunkingService()
+    profile = ChunkingProfile(
+        strategy="plain_text_default",
+        chunk_size=5,
+        chunk_overlap=0,
+    )
 
-    chunks = service.chunk_text("abcdefghij")
+    chunks = service.chunk_text("abcdefghij", profile)
 
     assert chunks == ["abcde", "fghij"]
 
 
 def test_chunk_text_returns_no_chunks_for_blank_content() -> None:
     service = ChunkingService()
+    profile = ChunkingProfile(
+        strategy="plain_text_default",
+        chunk_size=1000,
+        chunk_overlap=200,
+    )
 
-    assert service.chunk_text("   ") == []
+    assert service.chunk_text("   ", profile) == []
 
 
 @pytest.mark.parametrize(
@@ -50,5 +72,12 @@ def test_chunking_service_rejects_invalid_configuration(
     chunk_overlap: int,
     message: str,
 ) -> None:
+    service = ChunkingService()
+    profile = ChunkingProfile(
+        strategy="plain_text_default",
+        chunk_size=chunk_size,
+        chunk_overlap=chunk_overlap,
+    )
+
     with pytest.raises(ValueError, match=message):
-        ChunkingService(chunk_size=chunk_size, chunk_overlap=chunk_overlap)
+        service.chunk_text("test", profile)

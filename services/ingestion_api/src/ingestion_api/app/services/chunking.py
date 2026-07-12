@@ -1,18 +1,16 @@
+from ingestion_api.app.services.profile_selector import ChunkingProfile
+
+
 class ChunkingService:
     """Split text into overlapping character-based chunks."""
 
-    def __init__(self, chunk_size: int = 1000, chunk_overlap: int = 200) -> None:
+    def chunk_text(self, text: str, profile: ChunkingProfile) -> list[str]:
+        self._validate_profile(profile)
+
+        chunk_size = profile.chunk_size
+        chunk_overlap = profile.chunk_overlap
         if chunk_size <= 0:
             raise ValueError("chunk_size must be greater than zero.")
-        if chunk_overlap < 0:
-            raise ValueError("chunk_overlap must not be negative.")
-        if chunk_overlap >= chunk_size:
-            raise ValueError("chunk_overlap must be smaller than chunk_size.")
-
-        self._chunk_size = chunk_size
-        self._chunk_overlap = chunk_overlap
-
-    def chunk_text(self, text: str) -> list[str]:
         normalized = text.strip()
         if not normalized:
             return []
@@ -22,7 +20,7 @@ class ChunkingService:
         text_length = len(normalized)
 
         while start < text_length:
-            chunk_end = min(start + self._chunk_size, text_length)
+            chunk_end = min(start + chunk_size, text_length)
             if chunk_end < text_length:
                 whitespace_index = normalized.rfind(" ", start, chunk_end)
                 newline_index = normalized.rfind("\n", start, chunk_end)
@@ -37,9 +35,18 @@ class ChunkingService:
             if chunk_end >= text_length:
                 break
 
-            next_start = chunk_end - self._chunk_overlap
+            next_start = chunk_end - chunk_overlap
             if next_start <= start:
                 next_start = chunk_end
             start = next_start
 
         return chunks
+
+    @staticmethod
+    def _validate_profile(profile: ChunkingProfile) -> None:
+        if profile.chunk_size <= 0:
+            raise ValueError("chunk_size must be greater than zero.")
+        if profile.chunk_overlap < 0:
+            raise ValueError("chunk_overlap must not be negative.")
+        if profile.chunk_overlap >= profile.chunk_size:
+            raise ValueError("chunk_overlap must be smaller than chunk_size.")

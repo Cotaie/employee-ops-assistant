@@ -1,6 +1,8 @@
 .agents/
 .codex/
 .venv/
+.vscode/*
+!.vscode/settings.json
 __pycache__/
 .pytest_cache/
 .mypy_cache/
@@ -10,3 +12,4 @@ __pycache__/
 *.egg-info/
 services/embeddings_api/.local/
 services/embeddings_api/.env
+services/ingestion_api/.env

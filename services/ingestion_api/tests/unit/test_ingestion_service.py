@@ -1,3 +1,8 @@
+from types import SimpleNamespace
+
+import pytest
+
+from contracts.document_ingestion import DocumentIngestionRequest
 from ingestion_api.app.services.chunking import ChunkingService
 from ingestion_api.app.services.document_loader import DocumentLoaderService
 from ingestion_api.app.services.ingestion import IngestionService
@@ -6,7 +11,7 @@ from ingestion_api.app.services.profile_selector import ChunkingProfileSelector
 
 
 def test_ingestion_service_uses_provided_chunking_service() -> None:
-    chunking_service = ChunkingService(chunk_size=256, chunk_overlap=32)
+    chunking_service = ChunkingService()
 
     service = IngestionService(chunking_service=chunking_service)
 
@@ -39,3 +44,91 @@ def test_ingestion_service_creates_default_chunking_service() -> None:
     assert isinstance(service.document_loader_service, DocumentLoaderService)
     assert isinstance(service.normalization_service, NormalizationService)
     assert isinstance(service.chunking_profile_selector, ChunkingProfileSelector)
+
+
+@pytest.mark.anyio
+async def test_ingest_temporary_document_runs_the_processing_pipeline(
+    monkeypatch,
+) -> None:
+    service = IngestionService()
+    calls: dict[str, object] = {}
+    payload = DocumentIngestionRequest(
+        document_name="Uploaded Benefits Form",
+        retention_mode="temporary",
+        content=" Raw line 1 \n\n Raw line 2 ",
+        content_type="text/plain",
+        source_uri=None,
+        metadata={"source": "upload"},
+    )
+
+    monkeypatch.setattr(
+        service.document_loader_service,
+        "load_document",
+        lambda *, content, content_type, source_uri: SimpleNamespace(
+            text=content,
+            loader_name="DirectContent",
+            metadata={"content_type": content_type, "source_uri": source_uri},
+        ),
+    )
+
+    def fake_normalize_text(text: str) -> str:
+        calls["normalized_input"] = text
+        return "normalized text"
+
+    monkeypatch.setattr(service.normalization_service, "normalize_text", fake_normalize_text)
+
+    def fake_select_profile(
+        *,
+        content_type: str | None,
+        source_uri: str | None,
+        normalized_text: str,
+    ):
+        calls["profile"] = {
+            "content_type": content_type,
+            "source_uri": source_uri,
+            "normalized_text": normalized_text,
+        }
+        return SimpleNamespace(strategy="plain_text_default", chunk_size=25, chunk_overlap=5)
+
+    monkeypatch.setattr(service.chunking_profile_selector, "select_profile", fake_select_profile)
+
+    def fake_chunk_text(text: str, profile: object) -> list[str]:
+        calls["chunking"] = {"text": text, "profile": profile}
+        return ["chunk-1", "chunk-2"]
+
+    monkeypatch.setattr(service.chunking_service, "chunk_text", fake_chunk_text)
+
+    response = await service.ingest_temporary_document(payload)
+
+    assert calls["normalized_input"] == "Raw line 1 \n\n Raw line 2"
+    assert calls["profile"] == {
+        "content_type": "text/plain",
+        "source_uri": None,
+        "normalized_text": "normalized text",
+    }
+    assert calls["chunking"]["text"] == "normalized text"
+    assert response.document_id.startswith("temp_")
+    assert response.document_name == "Uploaded Benefits Form"
+    assert response.retention_mode == "temporary"
+    assert response.document_status == "active"
+    assert response.ingestion_status == "success"
+    assert response.chunk_count == 2
+    assert response.embedding_count == 0
+    assert response.warnings == []
+
+
+@pytest.mark.anyio
+async def test_ingest_temporary_document_rejects_non_temporary_payload() -> None:
+    service = IngestionService()
+    payload = DocumentIngestionRequest(
+        document_name="Annual Leave Policy",
+        document_version="2026.1",
+        retention_mode="permanent",
+        category="HR",
+        content="policy text",
+        content_type="text/plain",
+        source_uri=None,
+    )
+
+    with pytest.raises(ValueError, match="Temporary ingestion requires retention_mode='temporary'."):
+        await service.ingest_temporary_document(payload)
