@@ -66,7 +66,18 @@ async def test_post_documents_uses_the_new_permanent_ingestion_route() -> None:
         ) as client:
             response = await client.post("/documents", json=_permanent_document_payload())
 
-    assert response.status_code == 501
+    body = response.json()
+
+    assert response.status_code == 200
+    assert body["document_id"].startswith("doc_")
+    assert body["document_name"] == "Annual Leave Policy"
+    assert body["document_version"] == "2026.1"
+    assert body["retention_mode"] == "permanent"
+    assert body["category"] == "HR"
+    assert body["document_status"] == "active"
+    assert body["ingestion_status"] == "pending"
+    assert body["expires_on"] is None
+    assert body["warnings"] == []
 
 
 @pytest.mark.anyio

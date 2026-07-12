@@ -47,6 +47,47 @@ def test_ingestion_service_creates_default_chunking_service() -> None:
 
 
 @pytest.mark.anyio
+async def test_ingest_permanent_document_returns_pending_response() -> None:
+    service = IngestionService()
+    payload = DocumentIngestionRequest(
+        document_name="Annual Leave Policy",
+        document_version="2026.1",
+        retention_mode="permanent",
+        category="HR",
+        source_uri="s3://knowledge-base/hr/annual-leave.pdf",
+        content_type="application/pdf",
+        metadata={"source": "knowledge-base"},
+    )
+
+    response = await service.ingest_permanent_document(payload)
+
+    assert response.document_id.startswith("doc_")
+    assert response.document_name == "Annual Leave Policy"
+    assert response.document_version == "2026.1"
+    assert response.retention_mode == "permanent"
+    assert response.category == "HR"
+    assert response.document_status == "active"
+    assert response.ingestion_status == "pending"
+    assert response.expires_on is None
+    assert response.warnings == []
+
+
+@pytest.mark.anyio
+async def test_ingest_permanent_document_rejects_non_permanent_payload() -> None:
+    service = IngestionService()
+    payload = DocumentIngestionRequest(
+        document_name="Uploaded Benefits Form",
+        retention_mode="temporary",
+        content="raw extracted text",
+        content_type="text/plain",
+        source_uri=None,
+    )
+
+    with pytest.raises(ValueError, match="Permanent ingestion requires retention_mode='permanent'."):
+        await service.ingest_permanent_document(payload)
+
+
+@pytest.mark.anyio
 async def test_ingest_temporary_document_runs_the_processing_pipeline(
     monkeypatch,
 ) -> None:

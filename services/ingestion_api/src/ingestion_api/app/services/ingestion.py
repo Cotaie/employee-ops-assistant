@@ -54,7 +54,38 @@ class IngestionService:
         self,
         payload: DocumentIngestionRequest,
     ) -> DocumentIngestionAcceptedResponse:
-        raise NotImplementedError("Permanent document ingestion is not implemented yet.")
+        if payload.retention_mode != "permanent":
+            raise ValueError("Permanent ingestion requires retention_mode='permanent'.")
+
+        now = datetime.now(UTC)
+        document = StoredDocument(
+            document_id=f"doc_{uuid4().hex}",
+            document_name=payload.document_name,
+            document_version=payload.document_version,
+            retention_mode=payload.retention_mode,
+            category=payload.category,
+            document_status="active",
+            created_on=now,
+            modified_on=now,
+            expires_on=None,
+            chunk_count=0,
+            embedding_count=0,
+        )
+        self._documents[document.document_id] = document
+
+        return DocumentIngestionAcceptedResponse(
+            document_id=document.document_id,
+            document_name=document.document_name,
+            document_version=document.document_version,
+            retention_mode=document.retention_mode,
+            category=document.category,
+            document_status=document.document_status,
+            ingestion_status="pending",
+            created_on=document.created_on,
+            modified_on=document.modified_on,
+            expires_on=document.expires_on,
+            warnings=document.warnings,
+        )
 
     async def ingest_temporary_document(
         self,
