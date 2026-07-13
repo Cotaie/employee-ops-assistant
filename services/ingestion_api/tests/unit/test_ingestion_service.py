@@ -1,5 +1,6 @@
 from types import SimpleNamespace
 
+from clients.chroma import ChromaChunkRecord, ChromaClient
 from clients.embeddings_api import EmbeddingsApiClient
 import pytest
 
@@ -25,6 +26,14 @@ class FakeEmbeddingsApiClient(EmbeddingsApiClient):
         )
 
 
+class FakeChromaClient(ChromaClient):
+    def __init__(self) -> None:
+        self.calls: list[list[ChromaChunkRecord]] = []
+
+    async def upsert_chunks(self, records: list[ChromaChunkRecord]) -> None:
+        self.calls.append(records)
+
+
 def test_ingestion_service_uses_provided_chunking_service() -> None:
     chunking_service = ChunkingService()
 
@@ -36,6 +45,7 @@ def test_ingestion_service_uses_provided_chunking_service() -> None:
 def test_ingestion_service_uses_provided_collaborators() -> None:
     chunking_service = ChunkingService()
     document_loader_service = DocumentLoaderService()
+    chroma_client = FakeChromaClient()
     embeddings_client = FakeEmbeddingsApiClient()
     normalization_service = NormalizationService()
     chunking_profile_selector = ChunkingProfileSelector()
@@ -43,6 +53,7 @@ def test_ingestion_service_uses_provided_collaborators() -> None:
     service = IngestionService(
         chunking_service=chunking_service,
         document_loader_service=document_loader_service,
+        chroma_client=chroma_client,
         embeddings_client=embeddings_client,
         normalization_service=normalization_service,
         chunking_profile_selector=chunking_profile_selector,
@@ -50,6 +61,7 @@ def test_ingestion_service_uses_provided_collaborators() -> None:
 
     assert service.chunking_service is chunking_service
     assert service.document_loader_service is document_loader_service
+    assert service.chroma_client is chroma_client
     assert service.embeddings_client is embeddings_client
     assert service.normalization_service is normalization_service
     assert service.chunking_profile_selector is chunking_profile_selector
@@ -109,8 +121,12 @@ async def test_ingest_permanent_document_rejects_non_permanent_payload() -> None
 async def test_ingest_temporary_document_runs_the_processing_pipeline(
     monkeypatch,
 ) -> None:
+    chroma_client = FakeChromaClient()
     embeddings_client = FakeEmbeddingsApiClient()
-    service = IngestionService(embeddings_client=embeddings_client)
+    service = IngestionService(
+        chroma_client=chroma_client,
+        embeddings_client=embeddings_client,
+    )
     calls: dict[str, object] = {}
     payload = DocumentIngestionRequest(
         document_name="Uploaded Benefits Form",
@@ -168,6 +184,11 @@ async def test_ingest_temporary_document_runs_the_processing_pipeline(
     }
     assert calls["chunking"]["text"] == "normalized text"
     assert embeddings_client.calls == [["chunk-1", "chunk-2"]]
+    assert len(chroma_client.calls) == 1
+    assert [record.document for record in chroma_client.calls[0]] == ["chunk-1", "chunk-2"]
+    assert [record.embedding for record in chroma_client.calls[0]] == [[0.0, 0.0, 1.0], [1.0, 0.0, 1.0]]
+    assert chroma_client.calls[0][0].metadata["document_name"] == "Uploaded Benefits Form"
+    assert chroma_client.calls[0][0].metadata["chunk_index"] == 0
     assert response.document_id.startswith("temp_")
     assert response.document_name == "Uploaded Benefits Form"
     assert response.retention_mode == "temporary"

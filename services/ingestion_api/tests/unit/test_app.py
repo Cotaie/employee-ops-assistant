@@ -1,3 +1,4 @@
+from clients.chroma import ChromaChunkRecord, ChromaClient
 from clients.embeddings_api import EmbeddingsApiClient
 import httpx
 import pytest
@@ -17,6 +18,14 @@ class FakeEmbeddingsApiClient(EmbeddingsApiClient):
             model="fake-model",
             dimensions=3,
         )
+
+
+class FakeChromaClient(ChromaClient):
+    def __init__(self) -> None:
+        self.calls: list[list[ChromaChunkRecord]] = []
+
+    async def upsert_chunks(self, records: list[ChromaChunkRecord]) -> None:
+        self.calls.append(records)
 
 
 def _temporary_document_payload() -> dict[str, object]:
@@ -75,6 +84,7 @@ async def test_post_documents_uses_the_new_permanent_ingestion_route() -> None:
 
     async with app.router.lifespan_context(app):
         app.state.ingestion_service = IngestionService(
+            chroma_client=FakeChromaClient(),
             embeddings_client=FakeEmbeddingsApiClient(),
         )
         transport = httpx.ASGITransport(app=app)
@@ -104,6 +114,7 @@ async def test_post_temporary_documents_uses_the_new_sync_route() -> None:
 
     async with app.router.lifespan_context(app):
         app.state.ingestion_service = IngestionService(
+            chroma_client=FakeChromaClient(),
             embeddings_client=FakeEmbeddingsApiClient(),
         )
         transport = httpx.ASGITransport(app=app)

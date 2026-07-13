@@ -6,6 +6,7 @@ ENV PYTHONUNBUFFERED=1
 WORKDIR /app
 
 COPY libs/contracts /app/libs/contracts
+COPY libs/clients /app/libs/clients
 COPY services/ingestion_api /app/services/ingestion_api
 
 WORKDIR /app/services/ingestion_api
@@ -13,6 +14,7 @@ WORKDIR /app/services/ingestion_api
 RUN uv sync --no-dev
 
 ENV PATH="/app/services/ingestion_api/.venv/bin:${PATH}"
+ENV PYTHONPATH="/app/services/ingestion_api/src"
 
 EXPOSE 8000
 

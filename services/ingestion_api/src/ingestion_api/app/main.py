@@ -1,6 +1,7 @@
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 
+from clients.chroma import ChromaClient
 from clients.embeddings_api import EmbeddingsApiClient
 from fastapi import FastAPI
 
@@ -16,6 +17,11 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 
     if not hasattr(app.state, "ingestion_service"):
         app.state.ingestion_service = IngestionService(
+            chroma_client=ChromaClient(
+                host=app.state.settings.chroma_host,
+                port=app.state.settings.chroma_port,
+                collection_name=app.state.settings.chroma_collection_name,
+            ),
             embeddings_client=EmbeddingsApiClient(app.state.settings.embeddings_api_url),
         )
     yield

@@ -2,6 +2,7 @@ from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from uuid import uuid4
 
+from clients.chroma import ChromaChunkRecord, ChromaClient
 from clients.embeddings_api import EmbeddingsApiClient
 from contracts import EmbeddingsResponse
 from contracts.document_ingestion import (
@@ -43,12 +44,14 @@ class IngestionService:
         self,
         chunking_service: ChunkingService | None = None,
         document_loader_service: DocumentLoaderService | None = None,
+        chroma_client: ChromaClient | None = None,
         embeddings_client: EmbeddingsApiClient | None = None,
         normalization_service: NormalizationService | None = None,
         chunking_profile_selector: ChunkingProfileSelector | None = None,
     ) -> None:
         self._chunking_service = chunking_service or ChunkingService()
         self._document_loader_service = document_loader_service or DocumentLoaderService()
+        self._chroma_client = chroma_client
         self._embeddings_client = embeddings_client
         self._normalization_service = normalization_service or NormalizationService()
         self._chunking_profile_selector = chunking_profile_selector or ChunkingProfileSelector()
@@ -113,8 +116,9 @@ class IngestionService:
         embeddings = await self._generate_embeddings_for_chunks(chunks)
 
         now = datetime.now(UTC)
+        document_id = f"temp_{uuid4().hex}"
         document = StoredDocument(
-            document_id=f"temp_{uuid4().hex}",
+            document_id=document_id,
             document_name=payload.document_name,
             document_version=payload.document_version,
             retention_mode=payload.retention_mode,
@@ -125,6 +129,11 @@ class IngestionService:
             expires_on=None,
             chunk_count=len(chunks),
             embedding_count=len(embeddings.embeddings),
+        )
+        await self._persist_chunks(
+            document=document,
+            chunks=chunks,
+            embeddings=embeddings,
         )
         self._documents[document.document_id] = document
 
@@ -176,6 +185,10 @@ class IngestionService:
         return self._embeddings_client
 
     @property
+    def chroma_client(self) -> ChromaClient | None:
+        return self._chroma_client
+
+    @property
     def normalization_service(self) -> NormalizationService:
         return self._normalization_service
 
@@ -190,3 +203,45 @@ class IngestionService:
             return EmbeddingsResponse(embeddings=[], model="none", dimensions=0)
 
         return await self._embeddings_client.generate_embeddings(chunks)
+
+    async def _persist_chunks(
+        self,
+        *,
+        document: StoredDocument,
+        chunks: list[str],
+        embeddings: EmbeddingsResponse,
+    ) -> None:
+        if self._chroma_client is None:
+            return
+        if not chunks or not embeddings.embeddings:
+            return
+
+        base_metadata = self._build_chroma_metadata(document)
+        records = [
+            ChromaChunkRecord(
+                chunk_id=f"{document.document_id}:chunk:{index}",
+                document=chunk_text,
+                embedding=embeddings.embeddings[index],
+                metadata={**base_metadata, "chunk_index": index},
+            )
+            for index, chunk_text in enumerate(chunks)
+        ]
+        await self._chroma_client.upsert_chunks(records)
+
+    @staticmethod
+    def _build_chroma_metadata(document: StoredDocument) -> dict[str, str | int | float | bool]:
+        metadata: dict[str, str | int | float | bool | None] = {
+            "document_id": document.document_id,
+            "document_name": document.document_name,
+            "document_version": document.document_version,
+            "retention_mode": document.retention_mode,
+            "category": document.category,
+            "document_status": document.document_status,
+            "created_on": document.created_on.isoformat(),
+            "modified_on": document.modified_on.isoformat(),
+        }
+        return {
+            key: value
+            for key, value in metadata.items()
+            if value is not None
+        }
