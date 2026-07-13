@@ -2,6 +2,8 @@ from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from uuid import uuid4
 
+from clients.embeddings_api import EmbeddingsApiClient
+from contracts import EmbeddingsResponse
 from contracts.document_ingestion import (
     DocumentIngestionAcceptedResponse,
     DocumentDeleteResponse,
@@ -41,11 +43,13 @@ class IngestionService:
         self,
         chunking_service: ChunkingService | None = None,
         document_loader_service: DocumentLoaderService | None = None,
+        embeddings_client: EmbeddingsApiClient | None = None,
         normalization_service: NormalizationService | None = None,
         chunking_profile_selector: ChunkingProfileSelector | None = None,
     ) -> None:
         self._chunking_service = chunking_service or ChunkingService()
         self._document_loader_service = document_loader_service or DocumentLoaderService()
+        self._embeddings_client = embeddings_client
         self._normalization_service = normalization_service or NormalizationService()
         self._chunking_profile_selector = chunking_profile_selector or ChunkingProfileSelector()
         self._documents: dict[str, StoredDocument] = {}
@@ -106,6 +110,7 @@ class IngestionService:
             normalized_text=normalized_text,
         )
         chunks = self._chunking_service.chunk_text(normalized_text, profile)
+        embeddings = await self._generate_embeddings_for_chunks(chunks)
 
         now = datetime.now(UTC)
         document = StoredDocument(
@@ -119,7 +124,7 @@ class IngestionService:
             modified_on=now,
             expires_on=None,
             chunk_count=len(chunks),
-            embedding_count=0,
+            embedding_count=len(embeddings.embeddings),
         )
         self._documents[document.document_id] = document
 
@@ -167,9 +172,21 @@ class IngestionService:
         return self._document_loader_service
 
     @property
+    def embeddings_client(self) -> EmbeddingsApiClient | None:
+        return self._embeddings_client
+
+    @property
     def normalization_service(self) -> NormalizationService:
         return self._normalization_service
 
     @property
     def chunking_profile_selector(self) -> ChunkingProfileSelector:
         return self._chunking_profile_selector
+
+    async def _generate_embeddings_for_chunks(self, chunks: list[str]) -> EmbeddingsResponse:
+        if not chunks:
+            return EmbeddingsResponse(embeddings=[], model="none", dimensions=0)
+        if self._embeddings_client is None:
+            return EmbeddingsResponse(embeddings=[], model="none", dimensions=0)
+
+        return await self._embeddings_client.generate_embeddings(chunks)

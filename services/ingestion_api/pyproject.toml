@@ -4,6 +4,7 @@ version = "0.1.0"
 description = "IngestionApi service for Employee Ops Assistant."
 requires-python = ">=3.12"
 dependencies = [
+    "clients",
     "contracts",
     "fastapi>=0.115.0,<1.0.0",
     "docx2txt>=0.8,<1.0",
@@ -23,6 +24,7 @@ dev = [
 ]
 
 [tool.uv.sources]
+clients = { path = "../../libs/clients", editable = true }
 contracts = { path = "../../libs/contracts", editable = true }
 
 [tool.pytest.ini_options]

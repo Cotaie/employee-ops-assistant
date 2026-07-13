@@ -409,6 +409,21 @@ wheels = [
 ]
 
 [[package]]
+name = "clients"
+version = "0.1.0"
+source = { editable = "../../libs/clients" }
+dependencies = [
+    { name = "contracts" },
+    { name = "httpx" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "contracts", editable = "../../libs/contracts" },
+    { name = "httpx", specifier = ">=0.28.0,<1.0.0" },
+]
+
+[[package]]
 name = "cloudpathlib"
 version = "0.24.0"
 source = { registry = "https://pypi.org/simple" }
@@ -887,6 +902,7 @@ name = "ingestion-api"
 version = "0.1.0"
 source = { virtual = "." }
 dependencies = [
+    { name = "clients" },
     { name = "contracts" },
     { name = "docx2txt" },
     { name = "fastapi" },
@@ -908,6 +924,7 @@ dev = [
 
 [package.metadata]
 requires-dist = [
+    { name = "clients", editable = "../../libs/clients" },
     { name = "contracts", editable = "../../libs/contracts" },
     { name = "docx2txt", specifier = ">=0.8,<1.0" },
     { name = "fastapi", specifier = ">=0.115.0,<1.0.0" },

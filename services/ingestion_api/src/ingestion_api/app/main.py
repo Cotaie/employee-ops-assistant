@@ -1,6 +1,7 @@
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 
+from clients.embeddings_api import EmbeddingsApiClient
 from fastapi import FastAPI
 
 from ingestion_api.app.api.routes import register_routes
@@ -14,7 +15,9 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         app.state.settings = get_settings()
 
     if not hasattr(app.state, "ingestion_service"):
-        app.state.ingestion_service = IngestionService()
+        app.state.ingestion_service = IngestionService(
+            embeddings_client=EmbeddingsApiClient(app.state.settings.embeddings_api_url),
+        )
     yield
 
 

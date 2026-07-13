@@ -1,7 +1,22 @@
+from clients.embeddings_api import EmbeddingsApiClient
 import httpx
 import pytest
 
+from contracts import EmbeddingsResponse
 from ingestion_api.app.main import create_app
+from ingestion_api.app.services.ingestion import IngestionService
+
+
+class FakeEmbeddingsApiClient(EmbeddingsApiClient):
+    def __init__(self) -> None:
+        pass
+
+    async def generate_embeddings(self, inputs: list[str]) -> EmbeddingsResponse:
+        return EmbeddingsResponse(
+            embeddings=[[float(index), 0.0, 1.0] for index, _ in enumerate(inputs)],
+            model="fake-model",
+            dimensions=3,
+        )
 
 
 def _temporary_document_payload() -> dict[str, object]:
@@ -59,6 +74,9 @@ async def test_post_documents_uses_the_new_permanent_ingestion_route() -> None:
     app = create_app()
 
     async with app.router.lifespan_context(app):
+        app.state.ingestion_service = IngestionService(
+            embeddings_client=FakeEmbeddingsApiClient(),
+        )
         transport = httpx.ASGITransport(app=app)
         async with httpx.AsyncClient(
             transport=transport,
@@ -85,6 +103,9 @@ async def test_post_temporary_documents_uses_the_new_sync_route() -> None:
     app = create_app()
 
     async with app.router.lifespan_context(app):
+        app.state.ingestion_service = IngestionService(
+            embeddings_client=FakeEmbeddingsApiClient(),
+        )
         transport = httpx.ASGITransport(app=app)
         async with httpx.AsyncClient(
             transport=transport,
@@ -104,7 +125,7 @@ async def test_post_temporary_documents_uses_the_new_sync_route() -> None:
     assert body["document_status"] == "active"
     assert body["ingestion_status"] == "success"
     assert body["chunk_count"] == 1
-    assert body["embedding_count"] == 0
+    assert body["embedding_count"] == 1
     assert body["warnings"] == []
 
 

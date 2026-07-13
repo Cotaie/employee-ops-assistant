@@ -1,13 +1,28 @@
 from types import SimpleNamespace
 
+from clients.embeddings_api import EmbeddingsApiClient
 import pytest
 
+from contracts import EmbeddingsResponse
 from contracts.document_ingestion import DocumentIngestionRequest
 from ingestion_api.app.services.chunking import ChunkingService
 from ingestion_api.app.services.document_loader import DocumentLoaderService
 from ingestion_api.app.services.ingestion import IngestionService
 from ingestion_api.app.services.normalization import NormalizationService
 from ingestion_api.app.services.profile_selector import ChunkingProfileSelector
+
+
+class FakeEmbeddingsApiClient(EmbeddingsApiClient):
+    def __init__(self) -> None:
+        self.calls: list[list[str]] = []
+
+    async def generate_embeddings(self, inputs: list[str]) -> EmbeddingsResponse:
+        self.calls.append(inputs)
+        return EmbeddingsResponse(
+            embeddings=[[float(index), 0.0, 1.0] for index, _ in enumerate(inputs)],
+            model="fake-model",
+            dimensions=3,
+        )
 
 
 def test_ingestion_service_uses_provided_chunking_service() -> None:
@@ -21,18 +36,21 @@ def test_ingestion_service_uses_provided_chunking_service() -> None:
 def test_ingestion_service_uses_provided_collaborators() -> None:
     chunking_service = ChunkingService()
     document_loader_service = DocumentLoaderService()
+    embeddings_client = FakeEmbeddingsApiClient()
     normalization_service = NormalizationService()
     chunking_profile_selector = ChunkingProfileSelector()
 
     service = IngestionService(
         chunking_service=chunking_service,
         document_loader_service=document_loader_service,
+        embeddings_client=embeddings_client,
         normalization_service=normalization_service,
         chunking_profile_selector=chunking_profile_selector,
     )
 
     assert service.chunking_service is chunking_service
     assert service.document_loader_service is document_loader_service
+    assert service.embeddings_client is embeddings_client
     assert service.normalization_service is normalization_service
     assert service.chunking_profile_selector is chunking_profile_selector
 
@@ -91,7 +109,8 @@ async def test_ingest_permanent_document_rejects_non_permanent_payload() -> None
 async def test_ingest_temporary_document_runs_the_processing_pipeline(
     monkeypatch,
 ) -> None:
-    service = IngestionService()
+    embeddings_client = FakeEmbeddingsApiClient()
+    service = IngestionService(embeddings_client=embeddings_client)
     calls: dict[str, object] = {}
     payload = DocumentIngestionRequest(
         document_name="Uploaded Benefits Form",
@@ -148,13 +167,14 @@ async def test_ingest_temporary_document_runs_the_processing_pipeline(
         "normalized_text": "normalized text",
     }
     assert calls["chunking"]["text"] == "normalized text"
+    assert embeddings_client.calls == [["chunk-1", "chunk-2"]]
     assert response.document_id.startswith("temp_")
     assert response.document_name == "Uploaded Benefits Form"
     assert response.retention_mode == "temporary"
     assert response.document_status == "active"
     assert response.ingestion_status == "success"
     assert response.chunk_count == 2
-    assert response.embedding_count == 0
+    assert response.embedding_count == 2
     assert response.warnings == []
 
 

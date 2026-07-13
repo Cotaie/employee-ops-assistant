@@ -4,6 +4,7 @@ version = "0.1.0"
 description = "Root development environment for the Employee Ops Assistant monorepo."
 requires-python = ">=3.12"
 dependencies = [
+    "clients",
     "contracts",
     "embeddings-api",
     "ingestion-api",
@@ -22,6 +23,7 @@ dev = [
 package = false
 
 [tool.uv.sources]
+clients = { path = "libs/clients", editable = true }
 contracts = { path = "libs/contracts", editable = true }
 embeddings-api = { path = "services/embeddings_api", editable = true }
 ingestion-api = { path = "services/ingestion_api", editable = true }
