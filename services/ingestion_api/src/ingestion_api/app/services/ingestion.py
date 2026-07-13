@@ -2,7 +2,7 @@ from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from uuid import uuid4
 
-from clients.chroma import ChromaChunkRecord, ChromaClient
+from clients.chroma import ChromaChunkRecord, ChromaClient, ChromaStoredRecord
 from clients.embeddings_api import EmbeddingsApiClient
 from contracts import EmbeddingsResponse
 from contracts.document_ingestion import (
@@ -13,6 +13,7 @@ from contracts.document_ingestion import (
     DocumentListQuery,
     DocumentListResponse,
     DocumentPatchRequest,
+    DocumentSummaryResponse,
     DocumentUpdateResponse,
 )
 from ingestion_api.app.services.chunking import ChunkingService
@@ -157,7 +158,14 @@ class IngestionService:
         self,
         filters: DocumentListQuery,
     ) -> DocumentListResponse:
-        raise NotImplementedError("Document listing is not implemented yet.")
+        if self._chroma_client is None:
+            return DocumentListResponse()
+
+        where = self._build_list_filters(filters)
+        records = await self._chroma_client.get_chunks(where=where)
+        summaries = self._build_document_summaries(records)
+
+        return DocumentListResponse(documents=summaries)
 
     async def delete_document(
         self,
@@ -245,3 +253,39 @@ class IngestionService:
             for key, value in metadata.items()
             if value is not None
         }
+
+    @staticmethod
+    def _build_list_filters(filters: DocumentListQuery) -> dict[str, str] | None:
+        where: dict[str, str] = {}
+        if filters.document_id is not None:
+            where["document_id"] = filters.document_id
+        if filters.document_name is not None:
+            where["document_name"] = filters.document_name
+        if filters.status is not None:
+            where["document_status"] = filters.status
+
+        return where or None
+
+    @staticmethod
+    def _build_document_summaries(records: list[ChromaStoredRecord]) -> list[DocumentSummaryResponse]:
+        documents_by_id: dict[str, DocumentSummaryResponse] = {}
+
+        for record in records:
+            metadata = record.metadata
+            document_id = metadata["document_id"]
+            if document_id in documents_by_id:
+                continue
+
+            documents_by_id[document_id] = DocumentSummaryResponse(
+                document_id=document_id,
+                document_name=metadata["document_name"],
+                document_version=metadata.get("document_version"),
+                retention_mode=metadata["retention_mode"],
+                category=metadata.get("category"),
+                document_status=metadata["document_status"],
+                created_on=datetime.fromisoformat(metadata["created_on"]),
+                modified_on=datetime.fromisoformat(metadata["modified_on"]),
+                expires_on=None,
+            )
+
+        return sorted(documents_by_id.values(), key=lambda document: document.created_on)
