@@ -197,7 +197,31 @@ class IngestionService:
         document_id: str,
         payload: DocumentPatchRequest,
     ) -> DocumentUpdateResponse:
-        raise NotImplementedError("Document update is not implemented yet.")
+        self._validate_metadata_only_patch(payload)
+
+        if self._chroma_client is None:
+            raise ValueError("Document updates require a configured Chroma client.")
+
+        records = await self._chroma_client.get_chunks(where={"document_id": document_id})
+        if not records:
+            raise LookupError(f"Document '{document_id}' was not found.")
+
+        document = self._build_updated_document(document_id=document_id, payload=payload, records=records)
+        updated_records = self._build_updated_chunk_records(document=document, records=records)
+        await self._chroma_client.upsert_chunks(updated_records)
+        self._documents[document_id] = document
+
+        return DocumentUpdateResponse(
+            document_id=document.document_id,
+            document_name=document.document_name,
+            document_version=document.document_version,
+            retention_mode=document.retention_mode,
+            category=document.category,
+            document_status=document.document_status,
+            update_status="success",
+            modified_on=document.modified_on,
+            warnings=document.warnings,
+        )
 
     @property
     def chunking_service(self) -> ChunkingService:
@@ -254,6 +278,75 @@ class IngestionService:
             for index, chunk_text in enumerate(chunks)
         ]
         await self._chroma_client.upsert_chunks(records)
+
+    @staticmethod
+    def _validate_metadata_only_patch(payload: DocumentPatchRequest) -> None:
+        if payload.content is not None or payload.source_uri is not None or payload.content_type is not None:
+            raise ValueError(
+                "PATCH /documents supports metadata-only updates. Reingest the document to change content."
+            )
+
+    def _build_updated_document(
+        self,
+        *,
+        document_id: str,
+        payload: DocumentPatchRequest,
+        records: list[ChromaStoredRecord],
+    ) -> StoredDocument:
+        metadata = records[0].metadata
+        now = datetime.now(UTC)
+
+        retention_mode = payload.retention_mode or metadata["retention_mode"]
+        category = payload.category if payload.category is not None else metadata.get("category")
+        if retention_mode == "permanent" and category is None:
+            raise ValueError("category is required when retention_mode is permanent.")
+        if retention_mode == "temporary" and category is not None:
+            raise ValueError("category must be null when retention_mode is temporary.")
+
+        created_on = datetime.fromisoformat(metadata["created_on"])
+        document = StoredDocument(
+            document_id=document_id,
+            document_name=payload.document_name or metadata["document_name"],
+            document_version=payload.document_version or metadata.get("document_version"),
+            retention_mode=retention_mode,
+            category=category,
+            document_status=metadata["document_status"],
+            created_on=created_on,
+            modified_on=now,
+            expires_on=None,
+            chunk_count=len(records),
+            embedding_count=sum(1 for record in records if record.embedding is not None),
+        )
+        return document
+
+    def _build_updated_chunk_records(
+        self,
+        *,
+        document: StoredDocument,
+        records: list[ChromaStoredRecord],
+    ) -> list[ChromaChunkRecord]:
+        base_metadata = self._build_chroma_metadata(document)
+        updated_records: list[ChromaChunkRecord] = []
+
+        for record in records:
+            if record.document is None or record.embedding is None:
+                raise ValueError(
+                    f"Stored chunk '{record.chunk_id}' is missing content or embedding and cannot be updated."
+                )
+
+            updated_records.append(
+                ChromaChunkRecord(
+                    chunk_id=record.chunk_id,
+                    document=record.document,
+                    embedding=record.embedding,
+                    metadata={
+                        **base_metadata,
+                        "chunk_index": record.metadata["chunk_index"],
+                    },
+                )
+            )
+
+        return updated_records
 
     @staticmethod
     def _build_chroma_metadata(document: StoredDocument) -> dict[str, str | int | float | bool]:

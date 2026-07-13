@@ -28,6 +28,15 @@ class FakeChromaClient(ChromaClient):
 
     async def upsert_chunks(self, records: list[ChromaChunkRecord]) -> None:
         self.calls.append(records)
+        stored_by_id = {record.chunk_id: record for record in self.stored_records}
+        for record in records:
+            stored_by_id[record.chunk_id] = ChromaStoredRecord(
+                chunk_id=record.chunk_id,
+                document=record.document,
+                embedding=record.embedding,
+                metadata=record.metadata,
+            )
+        self.stored_records = list(stored_by_id.values())
 
     async def get_chunks(
         self,
@@ -235,6 +244,7 @@ async def test_get_documents_returns_document_summaries() -> None:
         ChromaStoredRecord(
             chunk_id="temp_doc_1:chunk:0",
             document="chunk 0",
+            embedding=[0.0, 0.0, 1.0],
             metadata={
                 "document_id": "temp_doc_1",
                 "document_name": "HR Policy",
@@ -288,11 +298,13 @@ async def test_delete_document_uses_the_document_id_path() -> None:
         ChromaStoredRecord(
             chunk_id="doc_123:chunk:0",
             document="chunk 0",
+            embedding=[0.0, 0.0, 1.0],
             metadata={"document_id": "doc_123"},
         ),
         ChromaStoredRecord(
             chunk_id="doc_123:chunk:1",
             document="chunk 1",
+            embedding=[1.0, 0.0, 1.0],
             metadata={"document_id": "doc_123"},
         ),
     ]
@@ -321,10 +333,89 @@ async def test_delete_document_uses_the_document_id_path() -> None:
 
 
 @pytest.mark.anyio
-async def test_patch_document_uses_the_document_id_path() -> None:
+async def test_patch_document_updates_metadata_only() -> None:
+    app = create_app()
+    fake_chroma_client = FakeChromaClient()
+    fake_chroma_client.stored_records = [
+        ChromaStoredRecord(
+            chunk_id="temp_doc_1:chunk:0",
+            document="chunk 0",
+            embedding=[0.0, 0.0, 1.0],
+            metadata={
+                "document_id": "temp_doc_1",
+                "document_name": "HR Policy",
+                "document_version": "2026.1",
+                "retention_mode": "temporary",
+                "document_status": "active",
+                "chunk_index": 0,
+                "created_on": "2026-07-13T11:22:41.024965+00:00",
+                "modified_on": "2026-07-13T11:22:41.024965+00:00",
+            },
+        ),
+    ]
+
+    async with app.router.lifespan_context(app):
+        app.state.ingestion_service = IngestionService(
+            chroma_client=fake_chroma_client,
+            embeddings_client=FakeEmbeddingsApiClient(),
+        )
+        transport = httpx.ASGITransport(app=app)
+        async with httpx.AsyncClient(
+            transport=transport,
+            base_url="http://testserver",
+        ) as client:
+            response = await client.patch(
+                "/documents/temp_doc_1",
+                json={"document_name": "HR Policy Revised"},
+            )
+
+    body = response.json()
+
+    assert response.status_code == 200
+    assert body["document_id"] == "temp_doc_1"
+    assert body["document_name"] == "HR Policy Revised"
+    assert body["document_version"] == "2026.1"
+    assert body["retention_mode"] == "temporary"
+    assert body["document_status"] == "active"
+    assert body["update_status"] == "success"
+    assert body["warnings"] == []
+
+
+@pytest.mark.anyio
+async def test_patch_document_rejects_content_changes() -> None:
     app = create_app()
 
     async with app.router.lifespan_context(app):
+        app.state.ingestion_service = IngestionService(
+            chroma_client=FakeChromaClient(),
+            embeddings_client=FakeEmbeddingsApiClient(),
+        )
+        transport = httpx.ASGITransport(app=app)
+        async with httpx.AsyncClient(
+            transport=transport,
+            base_url="http://testserver",
+        ) as client:
+            response = await client.patch(
+                "/documents/temp_doc_1",
+                json={"content": "replacement content"},
+            )
+
+    assert response.status_code == 400
+    assert response.json() == {
+        "detail": "PATCH /documents supports metadata-only updates. Reingest the document to change content."
+    }
+
+
+@pytest.mark.anyio
+async def test_patch_document_uses_the_document_id_path() -> None:
+    app = create_app()
+    fake_chroma_client = FakeChromaClient()
+
+    async with app.router.lifespan_context(app):
+        app.state.ingestion_service = IngestionService(
+            chroma_client=fake_chroma_client,
+            embeddings_client=FakeEmbeddingsApiClient(),
+        )
         transport = httpx.ASGITransport(app=app)
         async with httpx.AsyncClient(
             transport=transport,
@@ -335,4 +426,7 @@ async def test_patch_document_uses_the_document_id_path() -> None:
                 json={"document_name": "Annual Leave Policy v2"},
             )
 
-    assert response.status_code == 501
+    assert response.status_code == 404
+    assert response.json() == {
+        "detail": "Document 'doc_123' was not found."
+    }

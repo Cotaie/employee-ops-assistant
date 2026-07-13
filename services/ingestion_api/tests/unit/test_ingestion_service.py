@@ -5,7 +5,7 @@ from clients.embeddings_api import EmbeddingsApiClient
 import pytest
 
 from contracts import EmbeddingsResponse
-from contracts.document_ingestion import DocumentIngestionRequest, DocumentListQuery
+from contracts.document_ingestion import DocumentIngestionRequest, DocumentListQuery, DocumentPatchRequest
 from ingestion_api.app.services.chunking import ChunkingService
 from ingestion_api.app.services.document_loader import DocumentLoaderService
 from ingestion_api.app.services.ingestion import IngestionService
@@ -34,6 +34,15 @@ class FakeChromaClient(ChromaClient):
 
     async def upsert_chunks(self, records: list[ChromaChunkRecord]) -> None:
         self.calls.append(records)
+        stored_by_id = {record.chunk_id: record for record in self.stored_records}
+        for record in records:
+            stored_by_id[record.chunk_id] = ChromaStoredRecord(
+                chunk_id=record.chunk_id,
+                document=record.document,
+                embedding=record.embedding,
+                metadata=record.metadata,
+            )
+        self.stored_records = list(stored_by_id.values())
 
     async def get_chunks(
         self,
@@ -248,6 +257,7 @@ async def test_list_documents_returns_deduplicated_document_summaries() -> None:
         ChromaStoredRecord(
             chunk_id="temp_doc_1:chunk:0",
             document="chunk 0",
+            embedding=[0.0, 0.0, 1.0],
             metadata={
                 "document_id": "temp_doc_1",
                 "document_name": "HR Policy",
@@ -262,6 +272,7 @@ async def test_list_documents_returns_deduplicated_document_summaries() -> None:
         ChromaStoredRecord(
             chunk_id="temp_doc_1:chunk:1",
             document="chunk 1",
+            embedding=[1.0, 0.0, 1.0],
             metadata={
                 "document_id": "temp_doc_1",
                 "document_name": "HR Policy",
@@ -276,6 +287,7 @@ async def test_list_documents_returns_deduplicated_document_summaries() -> None:
         ChromaStoredRecord(
             chunk_id="temp_doc_2:chunk:0",
             document="chunk 0",
+            embedding=[2.0, 0.0, 1.0],
             metadata={
                 "document_id": "temp_doc_2",
                 "document_name": "Benefits Guide",
@@ -305,6 +317,7 @@ async def test_list_documents_applies_metadata_filters() -> None:
         ChromaStoredRecord(
             chunk_id="temp_doc_1:chunk:0",
             document="chunk 0",
+            embedding=[0.0, 0.0, 1.0],
             metadata={
                 "document_id": "temp_doc_1",
                 "document_name": "HR Policy",
@@ -318,6 +331,7 @@ async def test_list_documents_applies_metadata_filters() -> None:
         ChromaStoredRecord(
             chunk_id="temp_doc_2:chunk:0",
             document="chunk 0",
+            embedding=[1.0, 0.0, 1.0],
             metadata={
                 "document_id": "temp_doc_2",
                 "document_name": "Benefits Guide",
@@ -344,16 +358,19 @@ async def test_delete_document_removes_all_chunks_for_document() -> None:
         ChromaStoredRecord(
             chunk_id="temp_doc_1:chunk:0",
             document="chunk 0",
+            embedding=[0.0, 0.0, 1.0],
             metadata={"document_id": "temp_doc_1"},
         ),
         ChromaStoredRecord(
             chunk_id="temp_doc_1:chunk:1",
             document="chunk 1",
+            embedding=[1.0, 0.0, 1.0],
             metadata={"document_id": "temp_doc_1"},
         ),
         ChromaStoredRecord(
             chunk_id="temp_doc_2:chunk:0",
             document="chunk 0",
+            embedding=[2.0, 0.0, 1.0],
             metadata={"document_id": "temp_doc_2"},
         ),
     ]
@@ -366,6 +383,76 @@ async def test_delete_document_removes_all_chunks_for_document() -> None:
     assert response.embedding_count == 2
     assert chroma_client.deleted_ids == ["temp_doc_1:chunk:0", "temp_doc_1:chunk:1"]
     assert [record.chunk_id for record in chroma_client.stored_records] == ["temp_doc_2:chunk:0"]
+
+
+@pytest.mark.anyio
+async def test_update_document_rewrites_chunk_metadata_only() -> None:
+    chroma_client = FakeChromaClient()
+    chroma_client.stored_records = [
+        ChromaStoredRecord(
+            chunk_id="temp_doc_1:chunk:0",
+            document="chunk 0",
+            embedding=[0.0, 0.0, 1.0],
+            metadata={
+                "document_id": "temp_doc_1",
+                "document_name": "HR Policy",
+                "document_version": "2026.1",
+                "retention_mode": "temporary",
+                "document_status": "active",
+                "chunk_index": 0,
+                "created_on": "2026-07-13T11:22:41.024965+00:00",
+                "modified_on": "2026-07-13T11:22:41.024965+00:00",
+            },
+        ),
+        ChromaStoredRecord(
+            chunk_id="temp_doc_1:chunk:1",
+            document="chunk 1",
+            embedding=[1.0, 0.0, 1.0],
+            metadata={
+                "document_id": "temp_doc_1",
+                "document_name": "HR Policy",
+                "document_version": "2026.1",
+                "retention_mode": "temporary",
+                "document_status": "active",
+                "chunk_index": 1,
+                "created_on": "2026-07-13T11:22:41.024965+00:00",
+                "modified_on": "2026-07-13T11:22:41.024965+00:00",
+            },
+        ),
+    ]
+    service = IngestionService(chroma_client=chroma_client)
+
+    response = await service.update_document(
+        "temp_doc_1",
+        DocumentPatchRequest(document_name="HR Policy Revised", document_version="2026.2"),
+    )
+
+    assert response.document_id == "temp_doc_1"
+    assert response.document_name == "HR Policy Revised"
+    assert response.document_version == "2026.2"
+    assert response.retention_mode == "temporary"
+    assert response.update_status == "success"
+    assert len(chroma_client.calls) == 1
+    assert [record.document for record in chroma_client.calls[0]] == ["chunk 0", "chunk 1"]
+    assert [record.embedding for record in chroma_client.calls[0]] == [[0.0, 0.0, 1.0], [1.0, 0.0, 1.0]]
+    assert chroma_client.calls[0][0].metadata["document_name"] == "HR Policy Revised"
+    assert chroma_client.calls[0][0].metadata["document_version"] == "2026.2"
+    assert chroma_client.calls[0][0].metadata["chunk_index"] == 0
+    assert chroma_client.calls[0][0].metadata["modified_on"] != "2026-07-13T11:22:41.024965+00:00"
+
+
+@pytest.mark.anyio
+async def test_update_document_rejects_content_changes() -> None:
+    service = IngestionService(chroma_client=FakeChromaClient())
+
+    with pytest.raises(
+        ValueError,
+        match="PATCH /documents supports metadata-only updates. Reingest the document to change content.",
+    ):
+        await service.update_document(
+            "temp_doc_1",
+            DocumentPatchRequest(content="replacement content"),
+        )
 
 
 @pytest.mark.anyio

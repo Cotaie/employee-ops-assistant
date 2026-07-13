@@ -16,6 +16,7 @@ class ChromaChunkRecord:
 class ChromaStoredRecord:
     chunk_id: str
     document: str | None
+    embedding: list[float] | None
     metadata: dict[str, Any]
 
 
@@ -55,17 +56,19 @@ class ChromaClient:
         collection = client.get_or_create_collection(name=self._collection_name)
         result = collection.get(
             where=where,
-            include=["documents", "metadatas"],
+            include=["documents", "embeddings", "metadatas"],
         )
 
         ids = result.get("ids", [])
         documents = result.get("documents", [])
+        embeddings = result.get("embeddings", [])
         metadatas = result.get("metadatas", [])
 
         return [
             ChromaStoredRecord(
                 chunk_id=chunk_id,
                 document=documents[index] if index < len(documents) else None,
+                embedding=embeddings[index] if index < len(embeddings) else None,
                 metadata=metadatas[index] if index < len(metadatas) else {},
             )
             for index, chunk_id in enumerate(ids)
