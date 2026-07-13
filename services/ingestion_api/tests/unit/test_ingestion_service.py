@@ -30,6 +30,7 @@ class FakeChromaClient(ChromaClient):
     def __init__(self) -> None:
         self.calls: list[list[ChromaChunkRecord]] = []
         self.stored_records: list[ChromaStoredRecord] = []
+        self.deleted_ids: list[str] = []
 
     async def upsert_chunks(self, records: list[ChromaChunkRecord]) -> None:
         self.calls.append(records)
@@ -47,6 +48,32 @@ class FakeChromaClient(ChromaClient):
             for record in self.stored_records
             if all(record.metadata.get(key) == value for key, value in where.items())
         ]
+
+    async def delete_chunks(
+        self,
+        *,
+        ids: list[str] | None = None,
+        where: dict[str, object] | None = None,
+    ) -> None:
+        if ids is not None:
+            self.deleted_ids.extend(ids)
+            self.stored_records = [
+                record for record in self.stored_records if record.chunk_id not in ids
+            ]
+            return
+
+        if where is not None:
+            matching_ids = [
+                record.chunk_id
+                for record in self.stored_records
+                if all(record.metadata.get(key) == value for key, value in where.items())
+            ]
+            self.deleted_ids.extend(matching_ids)
+            self.stored_records = [
+                record
+                for record in self.stored_records
+                if record.chunk_id not in matching_ids
+            ]
 
 
 def test_ingestion_service_uses_provided_chunking_service() -> None:
@@ -308,6 +335,37 @@ async def test_list_documents_applies_metadata_filters() -> None:
 
     assert len(response.documents) == 1
     assert response.documents[0].document_id == "temp_doc_2"
+
+
+@pytest.mark.anyio
+async def test_delete_document_removes_all_chunks_for_document() -> None:
+    chroma_client = FakeChromaClient()
+    chroma_client.stored_records = [
+        ChromaStoredRecord(
+            chunk_id="temp_doc_1:chunk:0",
+            document="chunk 0",
+            metadata={"document_id": "temp_doc_1"},
+        ),
+        ChromaStoredRecord(
+            chunk_id="temp_doc_1:chunk:1",
+            document="chunk 1",
+            metadata={"document_id": "temp_doc_1"},
+        ),
+        ChromaStoredRecord(
+            chunk_id="temp_doc_2:chunk:0",
+            document="chunk 0",
+            metadata={"document_id": "temp_doc_2"},
+        ),
+    ]
+    service = IngestionService(chroma_client=chroma_client)
+
+    response = await service.delete_document("temp_doc_1")
+
+    assert response.document_id == "temp_doc_1"
+    assert response.chunk_count == 2
+    assert response.embedding_count == 2
+    assert chroma_client.deleted_ids == ["temp_doc_1:chunk:0", "temp_doc_1:chunk:1"]
+    assert [record.chunk_id for record in chroma_client.stored_records] == ["temp_doc_2:chunk:0"]
 
 
 @pytest.mark.anyio

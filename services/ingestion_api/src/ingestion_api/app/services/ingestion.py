@@ -171,7 +171,26 @@ class IngestionService:
         self,
         document_id: str,
     ) -> DocumentDeleteResponse:
-        raise NotImplementedError("Document deletion is not implemented yet.")
+        if self._chroma_client is None:
+            return DocumentDeleteResponse(
+                document_id=document_id,
+                chunk_count=0,
+                embedding_count=0,
+            )
+
+        records = await self._chroma_client.get_chunks(where={"document_id": document_id})
+        if records:
+            await self._chroma_client.delete_chunks(ids=[record.chunk_id for record in records])
+
+        chunk_count = len(records)
+        embedding_count = len(records)
+        self._documents.pop(document_id, None)
+
+        return DocumentDeleteResponse(
+            document_id=document_id,
+            chunk_count=chunk_count,
+            embedding_count=embedding_count,
+        )
 
     async def update_document(
         self,

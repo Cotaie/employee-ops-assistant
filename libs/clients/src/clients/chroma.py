@@ -70,3 +70,16 @@ class ChromaClient:
             )
             for index, chunk_id in enumerate(ids)
         ]
+
+    async def delete_chunks(
+        self,
+        *,
+        ids: list[str] | None = None,
+        where: dict[str, Any] | None = None,
+    ) -> None:
+        client = chromadb.HttpClient(host=self._host, port=self._port)
+        collection = client.get_or_create_collection(name=self._collection_name)
+        collection.delete(
+            ids=ids,
+            where=where,
+        )

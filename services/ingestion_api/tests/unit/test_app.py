@@ -24,6 +24,7 @@ class FakeChromaClient(ChromaClient):
     def __init__(self) -> None:
         self.calls: list[list[ChromaChunkRecord]] = []
         self.stored_records: list[ChromaStoredRecord] = []
+        self.deleted_ids: list[str] = []
 
     async def upsert_chunks(self, records: list[ChromaChunkRecord]) -> None:
         self.calls.append(records)
@@ -41,6 +42,32 @@ class FakeChromaClient(ChromaClient):
             for record in self.stored_records
             if all(record.metadata.get(key) == value for key, value in where.items())
         ]
+
+    async def delete_chunks(
+        self,
+        *,
+        ids: list[str] | None = None,
+        where: dict[str, object] | None = None,
+    ) -> None:
+        if ids is not None:
+            self.deleted_ids.extend(ids)
+            self.stored_records = [
+                record for record in self.stored_records if record.chunk_id not in ids
+            ]
+            return
+
+        if where is not None:
+            matching_ids = [
+                record.chunk_id
+                for record in self.stored_records
+                if all(record.metadata.get(key) == value for key, value in where.items())
+            ]
+            self.deleted_ids.extend(matching_ids)
+            self.stored_records = [
+                record
+                for record in self.stored_records
+                if record.chunk_id not in matching_ids
+            ]
 
 
 def _temporary_document_payload() -> dict[str, object]:
@@ -256,8 +283,25 @@ async def test_get_documents_returns_document_summaries() -> None:
 @pytest.mark.anyio
 async def test_delete_document_uses_the_document_id_path() -> None:
     app = create_app()
+    fake_chroma_client = FakeChromaClient()
+    fake_chroma_client.stored_records = [
+        ChromaStoredRecord(
+            chunk_id="doc_123:chunk:0",
+            document="chunk 0",
+            metadata={"document_id": "doc_123"},
+        ),
+        ChromaStoredRecord(
+            chunk_id="doc_123:chunk:1",
+            document="chunk 1",
+            metadata={"document_id": "doc_123"},
+        ),
+    ]
 
     async with app.router.lifespan_context(app):
+        app.state.ingestion_service = IngestionService(
+            chroma_client=fake_chroma_client,
+            embeddings_client=FakeEmbeddingsApiClient(),
+        )
         transport = httpx.ASGITransport(app=app)
         async with httpx.AsyncClient(
             transport=transport,
@@ -265,7 +309,15 @@ async def test_delete_document_uses_the_document_id_path() -> None:
         ) as client:
             response = await client.delete("/documents/doc_123")
 
-    assert response.status_code == 501
+    body = response.json()
+
+    assert response.status_code == 200
+    assert body == {
+        "document_id": "doc_123",
+        "chunk_count": 2,
+        "embedding_count": 2,
+        "warnings": [],
+    }
 
 
 @pytest.mark.anyio
