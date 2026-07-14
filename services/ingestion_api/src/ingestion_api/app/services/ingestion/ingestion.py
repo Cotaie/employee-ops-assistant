@@ -35,7 +35,7 @@ class DocumentIngestionServiceMixin(IngestionServiceBase):
         )
         self._documents[document.document_id] = document
         asyncio.create_task(
-            self._ingest_permanent_document_in_background(
+            self._ingest_document(
                 document=document,
                 payload=payload,
             )
@@ -62,24 +62,9 @@ class DocumentIngestionServiceMixin(IngestionServiceBase):
         if payload.retention_mode != "temporary":
             raise ValueError("Temporary ingestion requires retention_mode='temporary'.")
 
-        loaded_document = self._document_loader_service.load_document(
-            content=payload.content,
-            content_type=payload.content_type,
-            source_uri=payload.source_uri,
-        )
-        normalized_text = self._normalization_service.normalize_text(loaded_document.text)
-        profile = self._chunking_profile_selector.select_profile(
-            content_type=payload.content_type,
-            source_uri=payload.source_uri,
-            normalized_text=normalized_text,
-        )
-        chunks = self._chunking_service.chunk_text(normalized_text, profile)
-        embeddings = await self._generate_embeddings_for_chunks(chunks)
-
         now = datetime.now(UTC)
-        document_id = f"temp_{uuid4().hex}"
         document = StoredDocument(
-            document_id=document_id,
+            document_id=f"temp_{uuid4().hex}",
             document_name=payload.document_name,
             document_version=payload.document_version,
             retention_mode=payload.retention_mode,
@@ -88,15 +73,13 @@ class DocumentIngestionServiceMixin(IngestionServiceBase):
             created_on=now,
             modified_on=now,
             expires_on=None,
-            chunk_count=len(chunks),
-            embedding_count=len(embeddings.embeddings),
+            chunk_count=0,
+            embedding_count=0,
         )
-        await self._persist_chunks(
+        document = await self._ingest_document(
             document=document,
-            chunks=chunks,
-            embeddings=embeddings,
+            payload=payload,
         )
-        self._documents[document.document_id] = document
 
         return DocumentIngestionResultResponse(
             document_id=document.document_id,
@@ -114,12 +97,12 @@ class DocumentIngestionServiceMixin(IngestionServiceBase):
             warnings=document.warnings,
         )
 
-    async def _ingest_permanent_document_in_background(
+    async def _ingest_document(
         self,
         *,
         document: StoredDocument,
         payload: DocumentIngestionRequest,
-    ) -> None:
+    ) -> StoredDocument:
         loaded_document = self._document_loader_service.load_document(
             content=payload.content,
             content_type=payload.content_type,
@@ -154,3 +137,4 @@ class DocumentIngestionServiceMixin(IngestionServiceBase):
             embeddings=embeddings,
         )
         self._documents[document.document_id] = persisted_document
+        return persisted_document
