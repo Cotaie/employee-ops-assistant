@@ -1,3 +1,4 @@
+import asyncio
 from datetime import UTC, datetime
 from uuid import uuid4
 
@@ -33,6 +34,12 @@ class DocumentIngestionServiceMixin(IngestionServiceBase):
             embedding_count=0,
         )
         self._documents[document.document_id] = document
+        asyncio.create_task(
+            self._ingest_permanent_document_in_background(
+                document=document,
+                payload=payload,
+            )
+        )
 
         return DocumentIngestionAcceptedResponse(
             document_id=document.document_id,
@@ -106,3 +113,44 @@ class DocumentIngestionServiceMixin(IngestionServiceBase):
             embedding_count=document.embedding_count,
             warnings=document.warnings,
         )
+
+    async def _ingest_permanent_document_in_background(
+        self,
+        *,
+        document: StoredDocument,
+        payload: DocumentIngestionRequest,
+    ) -> None:
+        loaded_document = self._document_loader_service.load_document(
+            content=payload.content,
+            content_type=payload.content_type,
+            source_uri=payload.source_uri,
+        )
+        normalized_text = self._normalization_service.normalize_text(loaded_document.text)
+        profile = self._chunking_profile_selector.select_profile(
+            content_type=payload.content_type,
+            source_uri=payload.source_uri,
+            normalized_text=normalized_text,
+        )
+        chunks = self._chunking_service.chunk_text(normalized_text, profile)
+        embeddings = await self._generate_embeddings_for_chunks(chunks)
+
+        persisted_document = StoredDocument(
+            document_id=document.document_id,
+            document_name=document.document_name,
+            document_version=document.document_version,
+            retention_mode=document.retention_mode,
+            category=document.category,
+            document_status=document.document_status,
+            created_on=document.created_on,
+            modified_on=datetime.now(UTC),
+            expires_on=document.expires_on,
+            chunk_count=len(chunks),
+            embedding_count=len(embeddings.embeddings),
+            warnings=list(document.warnings),
+        )
+        await self._persist_chunks(
+            document=persisted_document,
+            chunks=chunks,
+            embeddings=embeddings,
+        )
+        self._documents[document.document_id] = persisted_document

@@ -99,9 +99,9 @@ def _permanent_document_payload() -> dict[str, object]:
         "document_version": "2026.1",
         "retention_mode": "permanent",
         "category": "HR",
-        "content": None,
-        "source_uri": "s3://knowledge-base/hr/annual-leave.pdf",
-        "content_type": "application/pdf",
+        "content": "Annual leave policy text.",
+        "source_uri": None,
+        "content_type": "text/plain",
         "metadata": {"source": "knowledge-base"},
         "idempotency_key": "perm-doc-001",
     }
@@ -147,7 +147,7 @@ async def test_post_documents_uses_the_new_permanent_ingestion_route() -> None:
 
     body = response.json()
 
-    assert response.status_code == 200
+    assert response.status_code == 202
     assert body["document_id"].startswith("doc_")
     assert body["document_name"] == "Annual Leave Policy"
     assert body["document_version"] == "2026.1"

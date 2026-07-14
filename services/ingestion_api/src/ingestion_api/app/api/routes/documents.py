@@ -22,7 +22,11 @@ def _not_implemented(detail: str) -> HTTPException:
     return HTTPException(status_code=status.HTTP_501_NOT_IMPLEMENTED, detail=detail)
 
 
-@router.post("/documents", response_model=DocumentIngestionAcceptedResponse)
+@router.post(
+    "/documents",
+    response_model=DocumentIngestionAcceptedResponse,
+    status_code=status.HTTP_202_ACCEPTED,
+)
 async def create_document(
     payload: DocumentIngestionRequest,
     service: IngestionService = Depends(get_ingestion_service),

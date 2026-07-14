@@ -135,8 +135,9 @@ async def test_ingest_permanent_document_returns_pending_response() -> None:
         document_version="2026.1",
         retention_mode="permanent",
         category="HR",
-        source_uri="s3://knowledge-base/hr/annual-leave.pdf",
-        content_type="application/pdf",
+        content="Annual leave policy text.",
+        source_uri=None,
+        content_type="text/plain",
         metadata={"source": "knowledge-base"},
     )
 
