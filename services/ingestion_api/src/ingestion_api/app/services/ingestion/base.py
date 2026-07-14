@@ -6,15 +6,9 @@ from clients.chroma import ChromaChunkRecord, ChromaClient, ChromaStoredRecord
 from clients.embeddings_api import EmbeddingsApiClient
 from contracts import EmbeddingsResponse
 from contracts.document_ingestion import (
-    DocumentIngestionAcceptedResponse,
-    DocumentDeleteResponse,
-    DocumentIngestionRequest,
-    DocumentIngestionResultResponse,
     DocumentListQuery,
-    DocumentListResponse,
-    DocumentPatchRequest,
     DocumentSummaryResponse,
-    DocumentUpdateResponse,
+    DocumentPatchRequest,
 )
 from ingestion_api.app.services.chunking import ChunkingService
 from ingestion_api.app.services.document_loader import DocumentLoaderService
@@ -38,9 +32,7 @@ class StoredDocument:
     warnings: list[str] = field(default_factory=list)
 
 
-class IngestionService:
-    """Skeleton application service for document ingestion."""
-
+class IngestionServiceBase:
     def __init__(
         self,
         chunking_service: ChunkingService | None = None,
@@ -57,171 +49,6 @@ class IngestionService:
         self._normalization_service = normalization_service or NormalizationService()
         self._chunking_profile_selector = chunking_profile_selector or ChunkingProfileSelector()
         self._documents: dict[str, StoredDocument] = {}
-
-    async def ingest_permanent_document(
-        self,
-        payload: DocumentIngestionRequest,
-    ) -> DocumentIngestionAcceptedResponse:
-        if payload.retention_mode != "permanent":
-            raise ValueError("Permanent ingestion requires retention_mode='permanent'.")
-
-        now = datetime.now(UTC)
-        document = StoredDocument(
-            document_id=f"doc_{uuid4().hex}",
-            document_name=payload.document_name,
-            document_version=payload.document_version,
-            retention_mode=payload.retention_mode,
-            category=payload.category,
-            document_status="active",
-            created_on=now,
-            modified_on=now,
-            expires_on=None,
-            chunk_count=0,
-            embedding_count=0,
-        )
-        self._documents[document.document_id] = document
-
-        return DocumentIngestionAcceptedResponse(
-            document_id=document.document_id,
-            document_name=document.document_name,
-            document_version=document.document_version,
-            retention_mode=document.retention_mode,
-            category=document.category,
-            document_status=document.document_status,
-            ingestion_status="pending",
-            created_on=document.created_on,
-            modified_on=document.modified_on,
-            expires_on=document.expires_on,
-            warnings=document.warnings,
-        )
-
-    async def ingest_temporary_document(
-        self,
-        payload: DocumentIngestionRequest,
-    ) -> DocumentIngestionResultResponse:
-        if payload.retention_mode != "temporary":
-            raise ValueError("Temporary ingestion requires retention_mode='temporary'.")
-
-        loaded_document = self._document_loader_service.load_document(
-            content=payload.content,
-            content_type=payload.content_type,
-            source_uri=payload.source_uri,
-        )
-        normalized_text = self._normalization_service.normalize_text(loaded_document.text)
-        profile = self._chunking_profile_selector.select_profile(
-            content_type=payload.content_type,
-            source_uri=payload.source_uri,
-            normalized_text=normalized_text,
-        )
-        chunks = self._chunking_service.chunk_text(normalized_text, profile)
-        embeddings = await self._generate_embeddings_for_chunks(chunks)
-
-        now = datetime.now(UTC)
-        document_id = f"temp_{uuid4().hex}"
-        document = StoredDocument(
-            document_id=document_id,
-            document_name=payload.document_name,
-            document_version=payload.document_version,
-            retention_mode=payload.retention_mode,
-            category=payload.category,
-            document_status="active",
-            created_on=now,
-            modified_on=now,
-            expires_on=None,
-            chunk_count=len(chunks),
-            embedding_count=len(embeddings.embeddings),
-        )
-        await self._persist_chunks(
-            document=document,
-            chunks=chunks,
-            embeddings=embeddings,
-        )
-        self._documents[document.document_id] = document
-
-        return DocumentIngestionResultResponse(
-            document_id=document.document_id,
-            document_name=document.document_name,
-            document_version=document.document_version,
-            retention_mode=document.retention_mode,
-            category=document.category,
-            document_status=document.document_status,
-            ingestion_status="success",
-            created_on=document.created_on,
-            modified_on=document.modified_on,
-            expires_on=document.expires_on,
-            chunk_count=document.chunk_count,
-            embedding_count=document.embedding_count,
-            warnings=document.warnings,
-        )
-
-    async def list_documents(
-        self,
-        filters: DocumentListQuery,
-    ) -> DocumentListResponse:
-        if self._chroma_client is None:
-            return DocumentListResponse()
-
-        where = self._build_list_filters(filters)
-        records = await self._chroma_client.get_chunks(where=where)
-        summaries = self._build_document_summaries(records)
-
-        return DocumentListResponse(documents=summaries)
-
-    async def delete_document(
-        self,
-        document_id: str,
-    ) -> DocumentDeleteResponse:
-        if self._chroma_client is None:
-            return DocumentDeleteResponse(
-                document_id=document_id,
-                chunk_count=0,
-                embedding_count=0,
-            )
-
-        records = await self._chroma_client.get_chunks(where={"document_id": document_id})
-        if records:
-            await self._chroma_client.delete_chunks(ids=[record.chunk_id for record in records])
-
-        chunk_count = len(records)
-        embedding_count = len(records)
-        self._documents.pop(document_id, None)
-
-        return DocumentDeleteResponse(
-            document_id=document_id,
-            chunk_count=chunk_count,
-            embedding_count=embedding_count,
-        )
-
-    async def update_document(
-        self,
-        document_id: str,
-        payload: DocumentPatchRequest,
-    ) -> DocumentUpdateResponse:
-        self._validate_metadata_only_patch(payload)
-
-        if self._chroma_client is None:
-            raise ValueError("Document updates require a configured Chroma client.")
-
-        records = await self._chroma_client.get_chunks(where={"document_id": document_id})
-        if not records:
-            raise LookupError(f"Document '{document_id}' was not found.")
-
-        document = self._build_updated_document(document_id=document_id, payload=payload, records=records)
-        updated_records = self._build_updated_chunk_records(document=document, records=records)
-        await self._chroma_client.upsert_chunks(updated_records)
-        self._documents[document_id] = document
-
-        return DocumentUpdateResponse(
-            document_id=document.document_id,
-            document_name=document.document_name,
-            document_version=document.document_version,
-            retention_mode=document.retention_mode,
-            category=document.category,
-            document_status=document.document_status,
-            update_status="success",
-            modified_on=document.modified_on,
-            warnings=document.warnings,
-        )
 
     @property
     def chunking_service(self) -> ChunkingService:
@@ -304,7 +131,7 @@ class IngestionService:
             raise ValueError("category must be null when retention_mode is temporary.")
 
         created_on = datetime.fromisoformat(metadata["created_on"])
-        document = StoredDocument(
+        return StoredDocument(
             document_id=document_id,
             document_name=payload.document_name or metadata["document_name"],
             document_version=payload.document_version or metadata.get("document_version"),
@@ -317,7 +144,6 @@ class IngestionService:
             chunk_count=len(records),
             embedding_count=sum(1 for record in records if record.embedding is not None),
         )
-        return document
 
     def _build_updated_chunk_records(
         self,
