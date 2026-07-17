@@ -44,5 +44,17 @@ services:
     ports:
       - "8001:8000"
 
+  agent-api:
+    build:
+      context: ..
+      dockerfile: services/agent_api/Dockerfile
+    container_name: employee-ops-agent-api
+    restart: unless-stopped
+    environment:
+      SERVICE_NAME: agent-api
+      SERVICE_VERSION: docker
+    ports:
+      - "8003:8000"
+
 volumes:
   chroma-data:

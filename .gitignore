@@ -13,4 +13,5 @@ __pycache__/
 services/embeddings_api/.local/
 services/embeddings_api/.env
 services/ingestion_api/.env
+services/agent_api/.env
 future_improvements.md
