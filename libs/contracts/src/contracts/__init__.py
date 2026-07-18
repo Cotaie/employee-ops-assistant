@@ -1,36 +1,38 @@
 """Shared inter-service contracts."""
 
-from contracts.embeddings import EmbeddingsRequest, EmbeddingsResponse
+from contracts.agent import ChatRequest
+from contracts.approval import ApprovalRequest
 from contracts.document_ingestion import (
+    DocumentDeleteResponse,
     DocumentIngestionAcceptedResponse,
     DocumentIngestionRequest,
     DocumentIngestionResultResponse,
-    DocumentDeleteResponse,
     DocumentListQuery,
     DocumentListResponse,
-    DocumentLifecycleStatus,
-    DocumentRetentionMode,
     DocumentPatchRequest,
     DocumentSummaryResponse,
     DocumentUpdateResponse,
-    DocumentUpdateStatus,
 )
+from contracts.embeddings import EmbeddingsRequest, EmbeddingsResponse
+from contracts.error import ErrorResponse
 from contracts.health import HealthResponse
+from contracts.metrics import MetricsResponse
 
 __all__ = [
-    "EmbeddingsRequest",
-    "EmbeddingsResponse",
+    "ChatRequest",
+    "ApprovalRequest",
     "DocumentIngestionAcceptedResponse",
     "DocumentIngestionRequest",
     "DocumentIngestionResultResponse",
     "DocumentDeleteResponse",
     "DocumentListQuery",
     "DocumentListResponse",
-    "DocumentLifecycleStatus",
-    "DocumentRetentionMode",
     "DocumentPatchRequest",
     "DocumentSummaryResponse",
     "DocumentUpdateResponse",
-    "DocumentUpdateStatus",
+    "EmbeddingsRequest",
+    "EmbeddingsResponse",
+    "ErrorResponse",
     "HealthResponse",
+    "MetricsResponse",
 ]
