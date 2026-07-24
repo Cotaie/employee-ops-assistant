@@ -3,9 +3,34 @@ from contextlib import asynccontextmanager
 
 import httpx
 import pytest
+from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
+from pydantic import SecretStr
 
-from agent_api.app.core.config import get_settings
+from agent_api.app import main
+from agent_api.app.core.config import Settings, get_settings
 from agent_api.app.main import create_app
+
+
+class FakeChatModel:
+    def bind_tools(self, tools: list[object]) -> "FakeChatModel":
+        return self
+
+    async def ainvoke(self, messages: list[object]) -> AIMessage:
+        latest = messages[-1]
+        if isinstance(latest, ToolMessage):
+            if latest.text == "Tool request denied by the user.":
+                content = "Tool request denied. No external action was performed."
+            else:
+                content = f"Tool result: {latest.text}"
+        else:
+            content = latest.text if isinstance(latest, HumanMessage) else ""
+            content = f"Agent skeleton received: {content}"
+        return AIMessage(content=content)
+
+
+@pytest.fixture(autouse=True)
+def fake_chat_model(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(main, "create_chat_model", lambda settings: FakeChatModel())
 
 
 @asynccontextmanager
@@ -33,6 +58,13 @@ async def test_health_returns_service_metadata() -> None:
 
 def test_settings_are_cached() -> None:
     assert get_settings() is get_settings()
+
+
+def test_llm_settings_use_openai_defaults() -> None:
+    settings = Settings(OPENAI_API_KEY=SecretStr("secret-key"))
+
+    assert settings.llm_model == "openai:gpt-5.4-mini"
+    assert settings.openai_api_key == SecretStr("secret-key")
 
 
 @pytest.mark.anyio

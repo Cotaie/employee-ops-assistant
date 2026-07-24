@@ -8,6 +8,7 @@ from langchain_core.tools import BaseTool
 from agent_api.app.api.routes import register_routes
 from agent_api.app.clients.github import create_github_client
 from agent_api.app.clients.jira import create_jira_wrapper
+from agent_api.app.clients.llm import create_chat_model
 from agent_api.app.core.config import get_settings
 from agent_api.app.services.agent import build_agent_graph
 from agent_api.app.tools.github import create_github_tools
@@ -28,8 +29,11 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         github = create_github_client(settings)
         tools.extend(create_github_tools(github, settings.github_repository))
 
+    model = create_chat_model(settings)
+    model_with_tools = model.bind_tools(tools)
+
     app.state.settings = settings
-    app.state.agent_graph = build_agent_graph(tools)
+    app.state.agent_graph = build_agent_graph(model_with_tools, tools)
     try:
         yield
     finally:

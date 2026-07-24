@@ -3,7 +3,9 @@ from functools import partial
 from typing import Any, Literal, NotRequired, TypedDict
 from uuid import uuid4
 
+from langchain_core.language_models import LanguageModelInput
 from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
+from langchain_core.runnables import Runnable
 from langchain_core.tools import BaseTool
 from langgraph.checkpoint.memory import InMemorySaver
 from langgraph.graph import END, START, MessagesState, StateGraph
@@ -36,22 +38,19 @@ async def retrieve_rag(state: AgentState) -> dict[str, list[dict[str, Any]]]:
     return {"rag_context": []}
 
 
-async def agent(state: AgentState) -> dict[str, object]:
-    """Deterministic stand-in for the future tool-bound chat model."""
+async def agent(
+    state: AgentState,
+    *,
+    model: Runnable[LanguageModelInput, AIMessage],
+) -> dict[str, object]:
+    """Ask the tool-bound model for the next conversational or tool-call step."""
 
     latest = state["messages"][-1]
-
-    if isinstance(latest, ToolMessage):
-        if latest.text == "Tool request denied by the user.":
-            content = "Tool request denied. No external action was performed."
-        else:
-            content = f"Tool result: {latest.text}"
-        return {"pending_tool": None, "messages": [AIMessage(content=content)]}
 
     if isinstance(latest, HumanMessage) and latest.text.startswith("/tool echo "):
         text = latest.text.removeprefix("/tool echo ")
         tool_call_id = str(uuid4())
-        proposal = ToolProposal(
+        demo_proposal = ToolProposal(
             id=tool_call_id,
             name="echo",
             arguments={"text": text},
@@ -61,19 +60,35 @@ async def agent(state: AgentState) -> dict[str, object]:
             content="Approval is required before running the echo tool.",
             tool_calls=[
                 {
-                    "name": proposal["name"],
-                    "args": proposal["arguments"],
-                    "id": proposal["id"],
+                    "name": demo_proposal["name"],
+                    "args": demo_proposal["arguments"],
+                    "id": demo_proposal["id"],
                     "type": "tool_call",
                 }
             ],
         )
-        return {"pending_tool": proposal, "messages": [message]}
+        return {"pending_tool": demo_proposal, "messages": [message]}
 
-    content = latest.text if isinstance(latest, HumanMessage) else ""
+    response = await model.ainvoke(state["messages"])
+    if len(response.tool_calls) > 1:
+        raise ValueError("Only one tool call per model response is currently supported.")
+
+    proposal: ToolProposal | None = None
+    if response.tool_calls:
+        tool_call = response.tool_calls[0]
+        model_tool_call_id = tool_call.get("id")
+        if not model_tool_call_id:
+            raise ValueError("Model tool call is missing an id.")
+        proposal = ToolProposal(
+            id=model_tool_call_id,
+            name=tool_call["name"],
+            arguments=dict(tool_call["args"]),
+            reason=f"Run external tool '{tool_call['name']}' requested by the model.",
+        )
+
     return {
-        "pending_tool": None,
-        "messages": [AIMessage(content=f"Agent skeleton received: {content}")],
+        "pending_tool": proposal,
+        "messages": [response],
     }
 
 
@@ -154,13 +169,16 @@ async def route_after_approval(
     return "execute_tool" if state.get("tool_approved") else "reject_tool"
 
 
-def build_agent_graph(tools: Sequence[BaseTool] = ()) -> AgentGraph:
+def build_agent_graph(
+    model: Runnable[LanguageModelInput, AIMessage],
+    tools: Sequence[BaseTool] = (),
+) -> AgentGraph:
     """Build and compile one in-memory graph instance for the app lifespan."""
 
     tools_by_name = {tool.name: tool for tool in tools}
     builder = StateGraph(AgentState)
     builder.add_node("retrieve_rag", retrieve_rag)
-    builder.add_node("agent", agent)
+    builder.add_node("agent", partial(agent, model=model))
     builder.add_node("approval", request_approval)
     builder.add_node("execute_tool", partial(execute_tool, tools=tools_by_name))
     builder.add_node("reject_tool", reject_tool)
