@@ -4,10 +4,13 @@ version = "0.1.0"
 description = "AgentApi service for Employee Ops Assistant."
 requires-python = ">=3.12"
 dependencies = [
+    "atlassian-python-api>=4.0.7",
     "contracts",
     "fastapi>=0.115.0,<1.0.0",
+    "langchain-community>=0.4.2",
     "langgraph>=1.1.0,<2.0.0",
     "pydantic-settings>=2.10.0,<3.0.0",
+    "pygithub>=2.9.1",
     "uvicorn[standard]>=0.35.0,<1.0.0",
 ]
 

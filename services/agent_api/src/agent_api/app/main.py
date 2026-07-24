@@ -2,19 +2,39 @@ from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
+from github import Github
+from langchain_core.tools import BaseTool
 
 from agent_api.app.api.routes import register_routes
+from agent_api.app.clients.github import create_github_client
+from agent_api.app.clients.jira import create_jira_wrapper
 from agent_api.app.core.config import get_settings
 from agent_api.app.services.agent import build_agent_graph
+from agent_api.app.tools.github import create_github_tools
+from agent_api.app.tools.jira import create_jira_tools
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
-    if not hasattr(app.state, "settings"):
-        app.state.settings = get_settings()
-    if not hasattr(app.state, "agent_graph"):
-        app.state.agent_graph = build_agent_graph()
-    yield
+    settings = get_settings()
+    tools: list[BaseTool] = []
+    github: Github | None = None
+
+    if settings.jira_instance_url and settings.jira_username and settings.jira_api_token:
+        jira = create_jira_wrapper(settings)
+        tools.extend(create_jira_tools(jira))
+
+    if settings.github_api_token and settings.github_repository:
+        github = create_github_client(settings)
+        tools.extend(create_github_tools(github, settings.github_repository))
+
+    app.state.settings = settings
+    app.state.agent_graph = build_agent_graph(tools)
+    try:
+        yield
+    finally:
+        if github is not None:
+            github.close()
 
 
 def create_app() -> FastAPI:

@@ -8,7 +8,7 @@ from langgraph.types import Interrupt, StateSnapshot
 from agent_api.app.services.agent import AgentGraph
 
 
-def get_agent_graph(request: Request) -> AgentGraph:
+async def get_agent_graph(request: Request) -> AgentGraph:
     """Return the graph compiled once during the FastAPI lifespan."""
 
     return cast(AgentGraph, request.app.state.agent_graph)
