@@ -1,11 +1,15 @@
 from types import SimpleNamespace
 
+import pytest
 from clients.chroma import ChromaChunkRecord, ChromaClient, ChromaStoredRecord
 from clients.embeddings_api import EmbeddingsApiClient
-import pytest
-
 from contracts import EmbeddingsResponse
-from contracts.document_ingestion import DocumentIngestionRequest, DocumentListQuery, DocumentPatchRequest
+from contracts.document_ingestion import (
+    DocumentIngestionRequest,
+    DocumentListQuery,
+    DocumentPatchRequest,
+)
+
 from ingestion_api.app.services.chunking import ChunkingService
 from ingestion_api.app.services.document_loader import DocumentLoaderService
 from ingestion_api.app.services.ingestion import IngestionService
@@ -79,9 +83,7 @@ class FakeChromaClient(ChromaClient):
             ]
             self.deleted_ids.extend(matching_ids)
             self.stored_records = [
-                record
-                for record in self.stored_records
-                if record.chunk_id not in matching_ids
+                record for record in self.stored_records if record.chunk_id not in matching_ids
             ]
 
 
@@ -165,7 +167,9 @@ async def test_ingest_permanent_document_rejects_non_permanent_payload() -> None
         source_uri=None,
     )
 
-    with pytest.raises(ValueError, match="Permanent ingestion requires retention_mode='permanent'."):
+    with pytest.raises(
+        ValueError, match="Permanent ingestion requires retention_mode='permanent'."
+    ):
         await service.ingest_permanent_document(payload)
 
 
@@ -238,7 +242,10 @@ async def test_ingest_temporary_document_runs_the_processing_pipeline(
     assert embeddings_client.calls == [["chunk-1", "chunk-2"]]
     assert len(chroma_client.calls) == 1
     assert [record.document for record in chroma_client.calls[0]] == ["chunk-1", "chunk-2"]
-    assert [record.embedding for record in chroma_client.calls[0]] == [[0.0, 0.0, 1.0], [1.0, 0.0, 1.0]]
+    assert [record.embedding for record in chroma_client.calls[0]] == [
+        [0.0, 0.0, 1.0],
+        [1.0, 0.0, 1.0],
+    ]
     assert chroma_client.calls[0][0].metadata["document_name"] == "Uploaded Benefits Form"
     assert chroma_client.calls[0][0].metadata["chunk_index"] == 0
     assert response.document_id.startswith("temp_")
@@ -435,7 +442,10 @@ async def test_update_document_rewrites_chunk_metadata_only() -> None:
     assert response.update_status == "success"
     assert len(chroma_client.calls) == 1
     assert [record.document for record in chroma_client.calls[0]] == ["chunk 0", "chunk 1"]
-    assert [record.embedding for record in chroma_client.calls[0]] == [[0.0, 0.0, 1.0], [1.0, 0.0, 1.0]]
+    assert [record.embedding for record in chroma_client.calls[0]] == [
+        [0.0, 0.0, 1.0],
+        [1.0, 0.0, 1.0],
+    ]
     assert chroma_client.calls[0][0].metadata["document_name"] == "HR Policy Revised"
     assert chroma_client.calls[0][0].metadata["document_version"] == "2026.2"
     assert chroma_client.calls[0][0].metadata["chunk_index"] == 0
@@ -448,7 +458,10 @@ async def test_update_document_rejects_content_changes() -> None:
 
     with pytest.raises(
         ValueError,
-        match="PATCH /documents supports metadata-only updates. Reingest the document to change content.",
+        match=(
+            "PATCH /documents supports metadata-only updates. "
+            "Reingest the document to change content."
+        ),
     ):
         await service.update_document(
             "temp_doc_1",
@@ -469,5 +482,7 @@ async def test_ingest_temporary_document_rejects_non_temporary_payload() -> None
         source_uri=None,
     )
 
-    with pytest.raises(ValueError, match="Temporary ingestion requires retention_mode='temporary'."):
+    with pytest.raises(
+        ValueError, match="Temporary ingestion requires retention_mode='temporary'."
+    ):
         await service.ingest_temporary_document(payload)

@@ -1,21 +1,32 @@
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from typing import Annotated
 
 from contracts.document_ingestion import (
-    DocumentIngestionAcceptedResponse,
     DocumentDeleteResponse,
+    DocumentIngestionAcceptedResponse,
     DocumentIngestionRequest,
     DocumentIngestionResultResponse,
+    DocumentLifecycleStatus,
     DocumentListQuery,
     DocumentListResponse,
-    DocumentLifecycleStatus,
     DocumentPatchRequest,
     DocumentUpdateResponse,
 )
+from fastapi import APIRouter, Depends, HTTPException, Query, status
+
 from ingestion_api.app.dependencies.ingestion import get_ingestion_service
 from ingestion_api.app.services.ingestion import IngestionService
 
-
 router = APIRouter()
+IngestionServiceDependency = Annotated[
+    IngestionService,
+    Depends(get_ingestion_service),
+]
+DocumentIdQuery = Annotated[str | None, Query()]
+DocumentNameQuery = Annotated[str | None, Query()]
+DocumentStatusQuery = Annotated[
+    DocumentLifecycleStatus | None,
+    Query(alias="status"),
+]
 
 
 def _not_implemented(detail: str) -> HTTPException:
@@ -29,7 +40,7 @@ def _not_implemented(detail: str) -> HTTPException:
 )
 async def create_document(
     payload: DocumentIngestionRequest,
-    service: IngestionService = Depends(get_ingestion_service),
+    service: IngestionServiceDependency,
 ) -> DocumentIngestionAcceptedResponse:
     try:
         return await service.ingest_permanent_document(payload)
@@ -40,7 +51,7 @@ async def create_document(
 @router.post("/temporary-documents", response_model=DocumentIngestionResultResponse)
 async def create_temporary_document(
     payload: DocumentIngestionRequest,
-    service: IngestionService = Depends(get_ingestion_service),
+    service: IngestionServiceDependency,
 ) -> DocumentIngestionResultResponse:
     try:
         return await service.ingest_temporary_document(payload)
@@ -50,10 +61,10 @@ async def create_temporary_document(
 
 @router.get("/documents")
 async def list_documents(
-    document_id: str | None = Query(default=None),
-    document_name: str | None = Query(default=None),
-    status_filter: DocumentLifecycleStatus | None = Query(default=None, alias="status"),
-    service: IngestionService = Depends(get_ingestion_service),
+    service: IngestionServiceDependency,
+    document_id: DocumentIdQuery = None,
+    document_name: DocumentNameQuery = None,
+    status_filter: DocumentStatusQuery = None,
 ) -> DocumentListResponse:
     filters = DocumentListQuery(
         document_id=document_id,
@@ -69,7 +80,7 @@ async def list_documents(
 @router.delete("/documents/{document_id}")
 async def delete_documents(
     document_id: str,
-    service: IngestionService = Depends(get_ingestion_service),
+    service: IngestionServiceDependency,
 ) -> DocumentDeleteResponse:
     try:
         return await service.delete_document(document_id)
@@ -81,7 +92,7 @@ async def delete_documents(
 async def update_document(
     document_id: str,
     payload: DocumentPatchRequest,
-    service: IngestionService = Depends(get_ingestion_service),
+    service: IngestionServiceDependency,
 ) -> DocumentUpdateResponse:
     try:
         return await service.update_document(document_id, payload)

@@ -3,14 +3,7 @@ name = "employee-ops-assistant-dev"
 version = "0.1.0"
 description = "Root development environment for the Employee Ops Assistant monorepo."
 requires-python = ">=3.12"
-dependencies = [
-    "agent-api",
-    "clients",
-    "contracts",
-    "embeddings-api",
-    "ingestion-api",
-    "unstructured>=0.24.1,<1.0.0",
-]
+dependencies = []
 
 [dependency-groups]
 dev = [
@@ -24,8 +17,15 @@ dev = [
 package = false
 
 [tool.uv.sources]
-agent-api = { path = "services/agent_api", editable = true }
-clients = { path = "libs/clients", editable = true }
-contracts = { path = "libs/contracts", editable = true }
-embeddings-api = { path = "services/embeddings_api", editable = true }
-ingestion-api = { path = "services/ingestion_api", editable = true }
+clients = { workspace = true }
+contracts = { workspace = true }
+
+[tool.uv.workspace]
+members = [
+      "services/agent_api",
+      "services/embeddings_api",
+      "services/ingestion_api",
+      "services/gradio_ui",
+      "libs/clients",
+      "libs/contracts",
+]

@@ -1,9 +1,9 @@
-from clients.chroma import ChromaChunkRecord, ChromaClient, ChromaStoredRecord
-from clients.embeddings_api import EmbeddingsApiClient
 import httpx
 import pytest
-
+from clients.chroma import ChromaChunkRecord, ChromaClient, ChromaStoredRecord
+from clients.embeddings_api import EmbeddingsApiClient
 from contracts import EmbeddingsResponse
+
 from ingestion_api.app.main import create_app
 from ingestion_api.app.services.ingestion import IngestionService
 
@@ -73,9 +73,7 @@ class FakeChromaClient(ChromaClient):
             ]
             self.deleted_ids.extend(matching_ids)
             self.stored_records = [
-                record
-                for record in self.stored_records
-                if record.chunk_id not in matching_ids
+                record for record in self.stored_records if record.chunk_id not in matching_ids
             ]
 
 
@@ -402,7 +400,10 @@ async def test_patch_document_rejects_content_changes() -> None:
 
     assert response.status_code == 400
     assert response.json() == {
-        "detail": "PATCH /documents supports metadata-only updates. Reingest the document to change content."
+        "detail": (
+            "PATCH /documents supports metadata-only updates. "
+            "Reingest the document to change content."
+        )
     }
 
 
@@ -427,6 +428,4 @@ async def test_patch_document_uses_the_document_id_path() -> None:
             )
 
     assert response.status_code == 404
-    assert response.json() == {
-        "detail": "Document 'doc_123' was not found."
-    }
+    assert response.json() == {"detail": "Document 'doc_123' was not found."}

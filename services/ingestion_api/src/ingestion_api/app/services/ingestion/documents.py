@@ -62,7 +62,9 @@ class DocumentManagementServiceMixin(IngestionServiceBase):
         if not records:
             raise LookupError(f"Document '{document_id}' was not found.")
 
-        document = self._build_updated_document(document_id=document_id, payload=payload, records=records)
+        document = self._build_updated_document(
+            document_id=document_id, payload=payload, records=records
+        )
         updated_records = self._build_updated_chunk_records(document=document, records=records)
         await self._chroma_client.upsert_chunks(updated_records)
         self._documents[document_id] = document

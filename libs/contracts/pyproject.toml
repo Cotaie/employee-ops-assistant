@@ -7,6 +7,9 @@ dependencies = [
     "pydantic>=2.11.0,<3.0.0",
 ]
 
+[tool.setuptools.package-data]
+contracts = ["py.typed"]
+
 [dependency-groups]
 dev = [
     "mypy>=1.17.0,<2.0.0",

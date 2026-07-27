@@ -18,10 +18,7 @@ class FakeModel:
         return 2
 
     def encode(self, inputs: list[str]) -> list[FakeVector]:
-        return [
-            FakeVector([float(index), float(len(text))])
-            for index, text in enumerate(inputs)
-        ]
+        return [FakeVector([float(index), float(len(text))]) for index, text in enumerate(inputs)]
 
 
 def test_embeddings_service_preserves_provider_metadata() -> None:

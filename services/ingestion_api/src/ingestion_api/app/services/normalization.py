@@ -29,7 +29,7 @@ class NormalizationService:
 
             blank_run += 1
             if blank_run == 1:
-               compact_lines.append("")
+                compact_lines.append("")
 
         return compact_lines
 

@@ -40,7 +40,9 @@ def test_load_document_returns_direct_content_without_loader() -> None:
     )
 
 
-def test_load_document_uses_markdown_loader_for_markdown_file(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_load_document_uses_markdown_loader_for_markdown_file(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     service = DocumentLoaderService()
     loader_calls: dict[str, str] = {}
 

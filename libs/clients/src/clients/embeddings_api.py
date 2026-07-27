@@ -1,5 +1,4 @@
 import httpx
-
 from contracts import EmbeddingsRequest, EmbeddingsResponse
 
 

@@ -1,7 +1,7 @@
 from dataclasses import dataclass, field
 from pathlib import Path
-from urllib.parse import urlparse
 from typing import Any
+from urllib.parse import urlparse
 
 
 @dataclass(slots=True)
@@ -105,5 +105,7 @@ class DocumentLoaderService:
 
     @staticmethod
     def _combine_documents(documents: list[Any]) -> str:
-        pages = [document.page_content.strip() for document in documents if document.page_content.strip()]
+        pages = [
+            document.page_content.strip() for document in documents if document.page_content.strip()
+        ]
         return "\n\n".join(pages)

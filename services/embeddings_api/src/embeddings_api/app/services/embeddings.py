@@ -1,7 +1,17 @@
 from pathlib import Path
-from typing import Any
+from typing import Protocol, cast
 
 from contracts import EmbeddingsResponse
+
+
+class EmbeddingVector(Protocol):
+    def tolist(self) -> list[float]: ...
+
+
+class EmbeddingModel(Protocol):
+    def get_embedding_dimension(self) -> int | None: ...
+
+    def encode(self, inputs: list[str]) -> list[EmbeddingVector]: ...
 
 
 class EmbeddingsService:
@@ -11,7 +21,7 @@ class EmbeddingsService:
         self,
         model_name: str,
         model_path: Path,
-        model: Any | None = None,
+        model: EmbeddingModel | None = None,
     ) -> None:
         self._model_name = model_name
         self._model = model or self._load_model(model_path)
@@ -21,10 +31,10 @@ class EmbeddingsService:
         self._dimensions = dimensions
 
     @staticmethod
-    def _load_model(model_path: Path) -> Any:
+    def _load_model(model_path: Path) -> EmbeddingModel:
         from sentence_transformers import SentenceTransformer
 
-        return SentenceTransformer(str(model_path))
+        return cast(EmbeddingModel, SentenceTransformer(str(model_path)))
 
     @property
     def model_name(self) -> str:

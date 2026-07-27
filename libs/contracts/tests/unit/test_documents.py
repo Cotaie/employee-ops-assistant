@@ -1,10 +1,10 @@
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import pytest
 
 from contracts.document_ingestion import (
-    DocumentIngestionAcceptedResponse,
     DocumentDeleteResponse,
+    DocumentIngestionAcceptedResponse,
     DocumentIngestionRequest,
     DocumentIngestionResultResponse,
     DocumentListQuery,
@@ -87,8 +87,8 @@ def test_document_ingestion_accepted_response_marks_pending_status() -> None:
         category="HR",
         document_status="active",
         ingestion_status="pending",
-        created_on=datetime(2026, 7, 8, 10, 0, tzinfo=timezone.utc),
-        modified_on=datetime(2026, 7, 8, 10, 0, tzinfo=timezone.utc),
+        created_on=datetime(2026, 7, 8, 10, 0, tzinfo=UTC),
+        modified_on=datetime(2026, 7, 8, 10, 0, tzinfo=UTC),
         expires_on=None,
         warnings=[],
     )
@@ -108,8 +108,8 @@ def test_document_ingestion_result_response_preserves_document_metadata() -> Non
         category="HR",
         document_status="active",
         ingestion_status="success",
-        created_on=datetime(2026, 7, 8, 10, 0, tzinfo=timezone.utc),
-        modified_on=datetime(2026, 7, 8, 10, 5, tzinfo=timezone.utc),
+        created_on=datetime(2026, 7, 8, 10, 0, tzinfo=UTC),
+        modified_on=datetime(2026, 7, 8, 10, 5, tzinfo=UTC),
         expires_on=None,
         chunk_count=8,
         embedding_count=8,
@@ -150,8 +150,8 @@ def test_document_summary_response_preserves_metadata() -> None:
         retention_mode="permanent",
         category="HR",
         document_status="active",
-        created_on=datetime(2026, 7, 8, 10, 0, tzinfo=timezone.utc),
-        modified_on=datetime(2026, 7, 8, 10, 5, tzinfo=timezone.utc),
+        created_on=datetime(2026, 7, 8, 10, 0, tzinfo=UTC),
+        modified_on=datetime(2026, 7, 8, 10, 5, tzinfo=UTC),
         expires_on=None,
     )
 
@@ -168,8 +168,8 @@ def test_document_list_response_wraps_summary_rows() -> None:
         retention_mode="permanent",
         category="HR",
         document_status="active",
-        created_on=datetime(2026, 7, 8, 10, 0, tzinfo=timezone.utc),
-        modified_on=datetime(2026, 7, 8, 10, 5, tzinfo=timezone.utc),
+        created_on=datetime(2026, 7, 8, 10, 0, tzinfo=UTC),
+        modified_on=datetime(2026, 7, 8, 10, 5, tzinfo=UTC),
         expires_on=None,
     )
     response = DocumentListResponse(documents=[summary])
@@ -221,10 +221,10 @@ def test_document_update_response_preserves_metadata() -> None:
         category="HR",
         document_status="active",
         update_status="success",
-        modified_on=datetime(2026, 7, 8, 12, 0, tzinfo=timezone.utc),
+        modified_on=datetime(2026, 7, 8, 12, 0, tzinfo=UTC),
         warnings=[],
     )
 
     assert response.document_id == "doc_123"
     assert response.update_status == "success"
-    assert response.modified_on == datetime(2026, 7, 8, 12, 0, tzinfo=timezone.utc)
+    assert response.modified_on == datetime(2026, 7, 8, 12, 0, tzinfo=UTC)

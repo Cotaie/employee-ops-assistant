@@ -1,15 +1,17 @@
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
-from uuid import uuid4
 
 from clients.chroma import ChromaChunkRecord, ChromaClient, ChromaStoredRecord
 from clients.embeddings_api import EmbeddingsApiClient
 from contracts import EmbeddingsResponse
 from contracts.document_ingestion import (
+    DocumentLifecycleStatus,
     DocumentListQuery,
-    DocumentSummaryResponse,
     DocumentPatchRequest,
+    DocumentRetentionMode,
+    DocumentSummaryResponse,
 )
+
 from ingestion_api.app.services.chunking import ChunkingService
 from ingestion_api.app.services.document_loader import DocumentLoaderService
 from ingestion_api.app.services.normalization import NormalizationService
@@ -21,9 +23,9 @@ class StoredDocument:
     document_id: str
     document_name: str
     document_version: str | None
-    retention_mode: str
+    retention_mode: DocumentRetentionMode
     category: str | None
-    document_status: str
+    document_status: DocumentLifecycleStatus
     created_on: datetime
     modified_on: datetime
     expires_on: datetime | None
@@ -108,9 +110,14 @@ class IngestionServiceBase:
 
     @staticmethod
     def _validate_metadata_only_patch(payload: DocumentPatchRequest) -> None:
-        if payload.content is not None or payload.source_uri is not None or payload.content_type is not None:
+        if (
+            payload.content is not None
+            or payload.source_uri is not None
+            or payload.content_type is not None
+        ):
             raise ValueError(
-                "PATCH /documents supports metadata-only updates. Reingest the document to change content."
+                "PATCH /documents supports metadata-only updates. "
+                "Reingest the document to change content."
             )
 
     def _build_updated_document(
@@ -157,7 +164,8 @@ class IngestionServiceBase:
         for record in records:
             if record.document is None or record.embedding is None:
                 raise ValueError(
-                    f"Stored chunk '{record.chunk_id}' is missing content or embedding and cannot be updated."
+                    f"Stored chunk '{record.chunk_id}' is missing content or embedding "
+                    "and cannot be updated."
                 )
 
             updated_records.append(
@@ -186,11 +194,7 @@ class IngestionServiceBase:
             "created_on": document.created_on.isoformat(),
             "modified_on": document.modified_on.isoformat(),
         }
-        return {
-            key: value
-            for key, value in metadata.items()
-            if value is not None
-        }
+        return {key: value for key, value in metadata.items() if value is not None}
 
     @staticmethod
     def _build_list_filters(filters: DocumentListQuery) -> dict[str, str] | None:
@@ -205,7 +209,9 @@ class IngestionServiceBase:
         return where or None
 
     @staticmethod
-    def _build_document_summaries(records: list[ChromaStoredRecord]) -> list[DocumentSummaryResponse]:
+    def _build_document_summaries(
+        records: list[ChromaStoredRecord],
+    ) -> list[DocumentSummaryResponse]:
         documents_by_id: dict[str, DocumentSummaryResponse] = {}
 
         for record in records:

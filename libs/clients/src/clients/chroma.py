@@ -2,6 +2,7 @@ from dataclasses import dataclass
 from typing import Any
 
 import chromadb
+from chromadb.api.types import IncludeEnum, PyEmbeddings
 
 
 @dataclass(slots=True)
@@ -40,10 +41,11 @@ class ChromaClient:
 
         client = chromadb.HttpClient(host=self._host, port=self._port)
         collection = client.get_or_create_collection(name=self._collection_name)
+        embeddings: PyEmbeddings = [record.embedding for record in records]
         collection.upsert(
             ids=[record.chunk_id for record in records],
             documents=[record.document for record in records],
-            embeddings=[record.embedding for record in records],
+            embeddings=embeddings,
             metadatas=[record.metadata for record in records],
         )
 
@@ -56,20 +58,28 @@ class ChromaClient:
         collection = client.get_or_create_collection(name=self._collection_name)
         result = collection.get(
             where=where,
-            include=["documents", "embeddings", "metadatas"],
+            include=[
+                IncludeEnum.documents,
+                IncludeEnum.embeddings,
+                IncludeEnum.metadatas,
+            ],
         )
 
         ids = result.get("ids", [])
-        documents = result.get("documents", [])
-        embeddings = result.get("embeddings", [])
-        metadatas = result.get("metadatas", [])
+        documents = result.get("documents") or []
+        embeddings = result.get("embeddings")
+        metadatas = result.get("metadatas") or []
 
         return [
             ChromaStoredRecord(
                 chunk_id=chunk_id,
                 document=documents[index] if index < len(documents) else None,
-                embedding=embeddings[index] if index < len(embeddings) else None,
-                metadata=metadatas[index] if index < len(metadatas) else {},
+                embedding=(
+                    [float(value) for value in embeddings[index]]
+                    if embeddings is not None and index < len(embeddings)
+                    else None
+                ),
+                metadata=dict(metadatas[index]) if index < len(metadatas) else {},
             )
             for index, chunk_id in enumerate(ids)
         ]

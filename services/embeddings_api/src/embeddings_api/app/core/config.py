@@ -14,7 +14,10 @@ class Settings(BaseSettings):
     service_name: str = Field(default="embeddings-api", alias="SERVICE_NAME")
     service_version: str | None = Field(default=None, alias="SERVICE_VERSION")
     model_name: str = Field(default="BAAI/bge-small-en-v1.5", alias="MODEL_NAME")
-    model_path: Path = Field(alias="MODEL_PATH")
+    model_path: Path = Field(
+        default=PROJECT_DIR / ".local" / "models" / "bge-small",
+        alias="MODEL_PATH",
+    )
 
     @field_validator("service_version", mode="before")
     @classmethod
@@ -30,6 +33,7 @@ class Settings(BaseSettings):
         if path.is_absolute():
             return path
         return PROJECT_DIR / path
+
 
 def get_settings() -> Settings:
     return Settings()

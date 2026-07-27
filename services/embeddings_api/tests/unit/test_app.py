@@ -3,7 +3,6 @@ from contextlib import asynccontextmanager
 
 import httpx
 import pytest
-
 from contracts import EmbeddingsResponse
 
 from embeddings_api.app.core.config import get_settings
