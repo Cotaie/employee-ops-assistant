@@ -2,16 +2,19 @@ from typing import Annotated, cast
 
 from contracts import ApprovalRequest, ChatRequest
 from fastapi import APIRouter, Depends, HTTPException, status
+from langchain.agents.middleware.types import InputAgentState, OutputAgentState
 from langgraph.types import Command, GraphOutput
 
 from agent_api.app.dependencies.agent import ThreadGraphContext, get_thread_graph_context
-from agent_api.app.services.agent import AgentState
 
 router = APIRouter(prefix="/threads", tags=["chat"])
 ThreadContextDependency = Annotated[ThreadGraphContext, Depends(get_thread_graph_context)]
 
 
-def _response(thread_id: str, result: GraphOutput[AgentState]) -> dict[str, object]:
+def _response(
+    thread_id: str,
+    result: GraphOutput[OutputAgentState[None]],
+) -> dict[str, object]:
     if result.interrupts:
         pending = result.interrupts[0]
         details = cast(dict[str, object], pending.value)
@@ -44,7 +47,10 @@ async def send_message(
         )
 
     result = await context.graph.ainvoke(
-        cast(AgentState, {"messages": [{"role": "user", "content": request.message}]}),
+        cast(
+            InputAgentState,
+            {"messages": [{"role": "user", "content": request.message}]},
+        ),
         config=context.config,
         version="v2",
     )
@@ -64,8 +70,13 @@ async def approve_tool(
             detail="The approval is stale or does not match the pending tool call.",
         )
 
+    decision = (
+        {"type": "approve"}
+        if request.approved
+        else {"type": "reject", "message": "Tool request denied by the user."}
+    )
     result = await context.graph.ainvoke(
-        Command(resume={"approved": request.approved}),
+        Command(resume={"decisions": [decision]}),
         config=context.config,
         version="v2",
     )

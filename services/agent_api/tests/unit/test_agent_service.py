@@ -1,40 +1,34 @@
-from typing import Any, cast
+from typing import cast
 
-import pytest
-from langchain_core.language_models import LanguageModelInput
-from langchain_core.messages import AIMessage, HumanMessage
-from langchain_core.runnables import Runnable
+from langchain.agents.middleware import HumanInTheLoopMiddleware
+from langchain_core.language_models.chat_models import BaseChatModel
+from langchain_core.tools import BaseTool
+from langgraph.checkpoint.memory import InMemorySaver
+from langgraph.graph.state import CompiledStateGraph
 
-from agent_api.app.services.agent import AgentState, agent
-
-
-class ToolCallingModel:
-    async def ainvoke(self, messages: list[object]) -> AIMessage:
-        return AIMessage(
-            content="",
-            tool_calls=[
-                {
-                    "name": "jira_create_issue",
-                    "args": {"summary": "Broken payroll"},
-                    "id": "call-1",
-                    "type": "tool_call",
-                }
-            ],
-        )
+from agent_api.app.services import agent as agent_service
 
 
-@pytest.mark.anyio
-async def test_agent_maps_model_tool_call_to_approval_proposal() -> None:
-    model = cast(Runnable[LanguageModelInput, AIMessage], ToolCallingModel())
-    state = cast(AgentState, {"messages": [HumanMessage(content="Create a Jira issue")]})
+def test_build_agent_configures_tools_hitl_and_checkpointer(
+    monkeypatch,
+) -> None:
+    model = cast(BaseChatModel, object())
+    tools = [cast(BaseTool, object())]
+    compiled_agent = cast(CompiledStateGraph, object())
+    captured: dict[str, object] = {}
 
-    result = await agent(state, model=model)
+    def fake_create_agent(**kwargs):
+        captured.update(kwargs)
+        return compiled_agent
 
-    assert result["pending_tool"] == {
-        "id": "call-1",
-        "name": "jira_create_issue",
-        "arguments": {"summary": "Broken payroll"},
-        "reason": "Run external tool 'jira_create_issue' requested by the model.",
-    }
-    messages = cast(list[Any], result["messages"])
-    assert isinstance(messages[0], AIMessage)
+    monkeypatch.setattr(agent_service, "create_agent", fake_create_agent)
+
+    result = agent_service.build_agent(model, tools)
+
+    assert result is compiled_agent
+    assert captured["model"] is model
+    assert captured["tools"] is tools
+    assert isinstance(captured["checkpointer"], InMemorySaver)
+    middleware = cast(list[object], captured["middleware"])
+    assert len(middleware) == 1
+    assert isinstance(middleware[0], HumanInTheLoopMiddleware)

@@ -1,201 +1,36 @@
-from collections.abc import Mapping, Sequence
-from functools import partial
-from typing import Any, Literal, NotRequired, TypedDict
-from uuid import uuid4
+from collections.abc import Sequence
 
-from langchain_core.language_models import LanguageModelInput
-from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
-from langchain_core.runnables import Runnable
+from langchain.agents import AgentState, create_agent
+from langchain.agents.middleware import HumanInTheLoopMiddleware
+from langchain.agents.middleware.types import InputAgentState, OutputAgentState
+from langchain_core.language_models.chat_models import BaseChatModel
 from langchain_core.tools import BaseTool
 from langgraph.checkpoint.memory import InMemorySaver
-from langgraph.graph import END, START, MessagesState, StateGraph
 from langgraph.graph.state import CompiledStateGraph
-from langgraph.types import interrupt
+
+AgentGraph = CompiledStateGraph[
+    AgentState[None],
+    None,
+    InputAgentState,
+    OutputAgentState[None],
+]
 
 
-class ToolProposal(TypedDict):
-    id: str
-    name: str
-    arguments: dict[str, Any]
-    reason: str
-
-
-class AgentState(MessagesState):
-    """State persisted by LangGraph for one conversation thread."""
-
-    rag_context: NotRequired[list[dict[str, Any]]]
-    pending_tool: NotRequired[ToolProposal | None]
-    tool_approved: NotRequired[bool | None]
-
-
-AgentGraph = CompiledStateGraph[AgentState, None, AgentState, AgentState]
-
-
-async def retrieve_rag(state: AgentState) -> dict[str, list[dict[str, Any]]]:
-    """Stub retrieval node; replace its body with the RetrievalApi client call."""
-
-    del state
-    return {"rag_context": []}
-
-
-async def agent(
-    state: AgentState,
-    *,
-    model: Runnable[LanguageModelInput, AIMessage],
-) -> dict[str, object]:
-    """Ask the tool-bound model for the next conversational or tool-call step."""
-
-    latest = state["messages"][-1]
-
-    if isinstance(latest, HumanMessage) and latest.text.startswith("/tool echo "):
-        text = latest.text.removeprefix("/tool echo ")
-        tool_call_id = str(uuid4())
-        demo_proposal = ToolProposal(
-            id=tool_call_id,
-            name="echo",
-            arguments={"text": text},
-            reason="Run the demo external tool requested by the user.",
-        )
-        message = AIMessage(
-            content="Approval is required before running the echo tool.",
-            tool_calls=[
-                {
-                    "name": demo_proposal["name"],
-                    "args": demo_proposal["arguments"],
-                    "id": demo_proposal["id"],
-                    "type": "tool_call",
-                }
-            ],
-        )
-        return {"pending_tool": demo_proposal, "messages": [message]}
-
-    response = await model.ainvoke(state["messages"])
-    if len(response.tool_calls) > 1:
-        raise ValueError("Only one tool call per model response is currently supported.")
-
-    proposal: ToolProposal | None = None
-    if response.tool_calls:
-        tool_call = response.tool_calls[0]
-        model_tool_call_id = tool_call.get("id")
-        if not model_tool_call_id:
-            raise ValueError("Model tool call is missing an id.")
-        proposal = ToolProposal(
-            id=model_tool_call_id,
-            name=tool_call["name"],
-            arguments=dict(tool_call["args"]),
-            reason=f"Run external tool '{tool_call['name']}' requested by the model.",
-        )
-
-    return {
-        "pending_tool": proposal,
-        "messages": [response],
-    }
-
-
-async def request_approval(state: AgentState) -> dict[str, bool]:
-    """Pause the graph until FastAPI resumes it with an approval decision."""
-
-    proposal = state.get("pending_tool")
-    if proposal is None:
-        raise ValueError("Approval requested without a pending tool call.")
-
-    decision: object = interrupt(
-        {
-            "type": "tool_approval",
-            "tool_call_id": proposal["id"],
-            "tool": proposal["name"],
-            "arguments": proposal["arguments"],
-            "reason": proposal["reason"],
-        }
-    )
-    if not isinstance(decision, Mapping) or not isinstance(decision.get("approved"), bool):
-        raise ValueError("Approval decision must contain a boolean 'approved' field.")
-
-    return {"tool_approved": decision["approved"]}
-
-
-async def execute_tool(
-    state: AgentState,
-    *,
-    tools: Mapping[str, BaseTool],
-) -> dict[str, object]:
-    """Execute an approved allow-listed tool."""
-
-    proposal = state.get("pending_tool")
-    if proposal is None:
-        raise ValueError("Tool execution requested without a pending tool call.")
-
-    if proposal["name"] == "echo":
-        result = str(proposal["arguments"].get("text", ""))
-    else:
-        tool = tools.get(proposal["name"])
-        if tool is None:
-            raise ValueError(f"Tool is not allow-listed: {proposal['name']}")
-        result = str(await tool.ainvoke(proposal["arguments"]))
-
-    return {
-        "pending_tool": None,
-        "tool_approved": None,
-        "messages": [ToolMessage(content=result, tool_call_id=proposal["id"])],
-    }
-
-
-async def reject_tool(state: AgentState) -> dict[str, object]:
-    """Record denial as a tool result so the agent can answer normally."""
-
-    proposal = state.get("pending_tool")
-    if proposal is None:
-        raise ValueError("Tool rejection requested without a pending tool call.")
-
-    return {
-        "pending_tool": None,
-        "tool_approved": None,
-        "messages": [
-            ToolMessage(
-                content="Tool request denied by the user.",
-                tool_call_id=proposal["id"],
-            )
-        ],
-    }
-
-
-async def route_after_agent(state: AgentState) -> Literal["approval", "end"]:
-    return "approval" if state.get("pending_tool") else "end"
-
-
-async def route_after_approval(
-    state: AgentState,
-) -> Literal["execute_tool", "reject_tool"]:
-    return "execute_tool" if state.get("tool_approved") else "reject_tool"
-
-
-def build_agent_graph(
-    model: Runnable[LanguageModelInput, AIMessage],
-    tools: Sequence[BaseTool] = (),
+def build_agent(
+    model: BaseChatModel,
+    tools: Sequence[BaseTool],
 ) -> AgentGraph:
-    """Build and compile one in-memory graph instance for the app lifespan."""
-
-    tools_by_name = {tool.name: tool for tool in tools}
-    builder = StateGraph(AgentState)
-    builder.add_node("retrieve_rag", retrieve_rag)
-    builder.add_node("agent", partial(agent, model=model))
-    builder.add_node("approval", request_approval)
-    builder.add_node("execute_tool", partial(execute_tool, tools=tools_by_name))
-    builder.add_node("reject_tool", reject_tool)
-
-    builder.add_edge(START, "retrieve_rag")
-    builder.add_edge("retrieve_rag", "agent")
-    builder.add_conditional_edges(
-        "agent",
-        route_after_agent,
-        {"approval": "approval", "end": END},
-    )
-    builder.add_conditional_edges(
-        "approval",
-        route_after_approval,
-        {"execute_tool": "execute_tool", "reject_tool": "reject_tool"},
-    )
-    builder.add_edge("execute_tool", "agent")
-    builder.add_edge("reject_tool", "agent")
-
-    return builder.compile(checkpointer=InMemorySaver())
+    middleware = [
+        HumanInTheLoopMiddleware(
+            interrupt_on={
+                "create_issue": {
+                    "allowed_decisions": ["approve", "reject"],
+                },
+                "github_create_issue": {
+                    "allowed_decisions": ["approve", "reject"],
+                }
+            }
+        )
+    ]
+    checkpointer = InMemorySaver()
+    return create_agent(model=model, tools=tools, middleware=middleware, checkpointer=checkpointer)

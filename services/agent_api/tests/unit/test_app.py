@@ -1,9 +1,12 @@
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
+from types import SimpleNamespace
+from typing import Any, cast
 
 import httpx
 import pytest
-from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
+from langchain_core.messages import AIMessage
+from langgraph.types import Command
 from pydantic import SecretStr
 
 from agent_api.app import main
@@ -11,26 +14,78 @@ from agent_api.app.core.config import Settings, get_settings
 from agent_api.app.main import create_app
 
 
-class FakeChatModel:
-    def bind_tools(self, tools: list[object]) -> "FakeChatModel":
-        return self
+class FakeAgent:
+    def __init__(self) -> None:
+        self.pending: dict[str, SimpleNamespace] = {}
 
-    async def ainvoke(self, messages: list[object]) -> AIMessage:
-        latest = messages[-1]
-        if isinstance(latest, ToolMessage):
-            if latest.text == "Tool request denied by the user.":
-                content = "Tool request denied. No external action was performed."
-            else:
-                content = f"Tool result: {latest.text}"
-        else:
-            content = latest.text if isinstance(latest, HumanMessage) else ""
-            content = f"Agent skeleton received: {content}"
-        return AIMessage(content=content)
+    @staticmethod
+    def _thread_id(config: dict[str, Any]) -> str:
+        return cast(str, config["configurable"]["thread_id"])
+
+    async def aget_state(self, config: dict[str, Any]) -> SimpleNamespace:
+        pending = self.pending.get(self._thread_id(config))
+        tasks = [] if pending is None else [SimpleNamespace(interrupts=[pending])]
+        return SimpleNamespace(tasks=tasks)
+
+    async def ainvoke(
+        self,
+        input_value: dict[str, Any] | Command[Any],
+        config: dict[str, Any],
+        *,
+        version: str,
+    ) -> SimpleNamespace:
+        del version
+        thread_id = self._thread_id(config)
+
+        if isinstance(input_value, Command):
+            resume = cast(dict[str, list[dict[str, str]]], input_value.resume)
+            decision = resume["decisions"][0]["type"]
+            pending = self.pending.pop(thread_id)
+            summary = pending.value["action_requests"][0]["args"]["summary"]
+            content = (
+                f"Tool result: {summary}"
+                if decision == "approve"
+                else "Tool request denied. No external action was performed."
+            )
+            return SimpleNamespace(
+                interrupts=[],
+                value={"messages": [AIMessage(content=content)]},
+            )
+
+        message = cast(str, input_value["messages"][-1]["content"])
+        if message.startswith("/tool create_issue "):
+            summary = message.removeprefix("/tool create_issue ")
+            pending = SimpleNamespace(
+                id=f"interrupt-{thread_id}",
+                value={
+                    "action_requests": [
+                        {
+                            "name": "create_issue",
+                            "args": {"summary": summary},
+                            "description": "Create a test issue.",
+                        }
+                    ],
+                    "review_configs": [
+                        {
+                            "action_name": "create_issue",
+                            "allowed_decisions": ["approve", "reject"],
+                        }
+                    ],
+                },
+            )
+            self.pending[thread_id] = pending
+            return SimpleNamespace(interrupts=[pending], value=None)
+
+        return SimpleNamespace(
+            interrupts=[],
+            value={"messages": [AIMessage(content=f"Agent skeleton received: {message}")]},
+        )
 
 
 @pytest.fixture(autouse=True)
-def fake_chat_model(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(main, "create_chat_model", lambda settings: FakeChatModel())
+def fake_agent(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(main, "create_chat_model", lambda settings: object())
+    monkeypatch.setattr(main, "build_agent", lambda model, tools: FakeAgent())
 
 
 @asynccontextmanager
@@ -89,14 +144,14 @@ async def test_tool_call_can_be_approved_and_resumed() -> None:
     async with build_test_client() as client:
         interrupted = await client.post(
             "/threads/thread-approval/messages",
-            json={"message": "/tool echo hello"},
+            json={"message": "/tool create_issue hello"},
         )
 
         assert interrupted.status_code == 200
         approval = interrupted.json()["approval"]
         assert interrupted.json()["status"] == "approval_required"
-        assert approval["tool"] == "echo"
-        assert approval["arguments"] == {"text": "hello"}
+        assert approval["action_requests"][0]["name"] == "create_issue"
+        assert approval["action_requests"][0]["args"] == {"summary": "hello"}
 
         resumed = await client.post(
             "/threads/thread-approval/approval",
@@ -117,7 +172,7 @@ async def test_tool_call_can_be_denied_without_execution() -> None:
     async with build_test_client() as client:
         interrupted = await client.post(
             "/threads/thread-denial/messages",
-            json={"message": "/tool echo do-not-run"},
+            json={"message": "/tool create_issue do-not-run"},
         )
         approval = interrupted.json()["approval"]
 

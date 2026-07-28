@@ -8,10 +8,10 @@ from langgraph.types import Interrupt, StateSnapshot
 from agent_api.app.services.agent import AgentGraph
 
 
-async def get_agent_graph(request: Request) -> AgentGraph:
+async def get_agent(request: Request) -> AgentGraph:
     """Return the graph compiled once during the FastAPI lifespan."""
 
-    return cast(AgentGraph, request.app.state.agent_graph)
+    return cast(AgentGraph, request.app.state.agent)
 
 
 @dataclass(frozen=True, slots=True)
@@ -29,7 +29,7 @@ class ThreadGraphContext:
 
 async def get_thread_graph_context(
     thread_id: str,
-    graph: Annotated[AgentGraph, Depends(get_agent_graph)],
+    graph: Annotated[AgentGraph, Depends(get_agent)],
 ) -> ThreadGraphContext:
     """Load the current checkpoint once for a thread-scoped request."""
 

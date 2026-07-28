@@ -10,7 +10,7 @@ from agent_api.app.clients.github import create_github_client
 from agent_api.app.clients.jira import create_jira_wrapper
 from agent_api.app.clients.llm import create_chat_model
 from agent_api.app.core.config import get_settings
-from agent_api.app.services.agent import build_agent_graph
+from agent_api.app.services.agent import build_agent
 from agent_api.app.tools.github import create_github_tools
 from agent_api.app.tools.jira import create_jira_tools
 
@@ -18,22 +18,28 @@ from agent_api.app.tools.jira import create_jira_tools
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     settings = get_settings()
-    tools: list[BaseTool] = []
+    jira_tools: list[BaseTool] = []
+    github_tools: list[BaseTool] = []
     github: Github | None = None
 
-    if settings.jira_instance_url and settings.jira_username and settings.jira_api_token:
+    try:
         jira = create_jira_wrapper(settings)
-        tools.extend(create_jira_tools(jira))
+        jira_tools = create_jira_tools(jira)
+    except ValueError:
+        pass
 
-    if settings.github_api_token and settings.github_repository:
-        github = create_github_client(settings)
-        tools.extend(create_github_tools(github, settings.github_repository))
+    if settings.github_repository is not None:
+        try:
+            github = create_github_client(settings)
+            github_tools = create_github_tools(github, settings.github_repository)
+        except ValueError:
+            pass
 
     model = create_chat_model(settings)
-    model_with_tools = model.bind_tools(tools)
 
     app.state.settings = settings
-    app.state.agent_graph = build_agent_graph(model_with_tools, tools)
+    app.state.agent = build_agent(model, [*jira_tools, *github_tools])
+
     try:
         yield
     finally:
