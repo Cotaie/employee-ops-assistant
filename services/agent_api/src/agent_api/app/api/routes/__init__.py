@@ -4,8 +4,10 @@ from fastapi import FastAPI
 
 from agent_api.app.api.routes.chat import router as chat_router
 from agent_api.app.api.routes.health import router as health_router
+from agent_api.app.api.routes.threads import router as thread_router
 
 
 def register_routes(app: FastAPI) -> None:
     app.include_router(health_router)
+    app.include_router(thread_router)
     app.include_router(chat_router)

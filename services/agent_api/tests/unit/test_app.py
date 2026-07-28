@@ -2,6 +2,7 @@ from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from types import SimpleNamespace
 from typing import Any, cast
+from uuid import UUID
 
 import httpx
 import pytest
@@ -120,6 +121,23 @@ def test_llm_settings_use_openai_defaults() -> None:
 
     assert settings.llm_model == "openai:gpt-5.4-mini"
     assert settings.openai_api_key == SecretStr("secret-key")
+
+
+@pytest.mark.anyio
+async def test_create_thread_returns_unique_uuid() -> None:
+    async with build_test_client() as client:
+        first_response = await client.post("/threads")
+        second_response = await client.post("/threads")
+
+    assert first_response.status_code == 201
+    assert second_response.status_code == 201
+
+    first_thread_id = first_response.json()["thread_id"]
+    second_thread_id = second_response.json()["thread_id"]
+
+    assert UUID(first_thread_id).version == 4
+    assert UUID(second_thread_id).version == 4
+    assert first_thread_id != second_thread_id
 
 
 @pytest.mark.anyio

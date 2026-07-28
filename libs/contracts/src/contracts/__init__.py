@@ -17,6 +17,7 @@ from contracts.embeddings import EmbeddingsRequest, EmbeddingsResponse
 from contracts.error import ErrorResponse
 from contracts.health import HealthResponse
 from contracts.metrics import MetricsResponse
+from contracts.threads import ThreadResponse
 
 __all__ = [
     "ChatRequest",
@@ -35,4 +36,5 @@ __all__ = [
     "ErrorResponse",
     "HealthResponse",
     "MetricsResponse",
+    "ThreadResponse",
 ]
