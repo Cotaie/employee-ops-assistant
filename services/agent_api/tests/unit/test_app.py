@@ -6,7 +6,9 @@ from uuid import UUID
 
 import httpx
 import pytest
-from langchain_core.messages import AIMessage
+from langchain_core.messages import AIMessage, HumanMessage
+from langgraph.checkpoint.memory import InMemorySaver
+from langgraph.graph import END, MessagesState, StateGraph
 from langgraph.types import Command
 from pydantic import SecretStr
 
@@ -14,10 +16,17 @@ from agent_api.app import main
 from agent_api.app.core.config import Settings, get_settings
 from agent_api.app.main import create_app
 
+MESSAGE_ID = "c159099f-62d1-4e70-83a4-4b82f6a237f9"
+
+
+def chat_payload(message: str, message_id: str = MESSAGE_ID) -> dict[str, str]:
+    return {"message_id": message_id, "message": message}
+
 
 class FakeAgent:
     def __init__(self) -> None:
         self.pending: dict[str, SimpleNamespace] = {}
+        self.inputs: dict[str, list[dict[str, Any]]] = {}
 
     @staticmethod
     def _thread_id(config: dict[str, Any]) -> str:
@@ -53,7 +62,10 @@ class FakeAgent:
                 value={"messages": [AIMessage(content=content)]},
             )
 
-        message = cast(str, input_value["messages"][-1]["content"])
+        self.inputs.setdefault(thread_id, []).append(input_value)
+        submitted_message = input_value["messages"][-1]
+        assert isinstance(submitted_message, HumanMessage)
+        message = cast(str, submitted_message.content)
         if message.startswith("/tool create_issue "):
             summary = message.removeprefix("/tool create_issue ")
             pending = SimpleNamespace(
@@ -102,9 +114,11 @@ class FakeAgent:
 
 
 @pytest.fixture(autouse=True)
-def fake_agent(monkeypatch: pytest.MonkeyPatch) -> None:
+def fake_agent(monkeypatch: pytest.MonkeyPatch) -> FakeAgent:
+    agent = FakeAgent()
     monkeypatch.setattr(main, "create_chat_model", lambda settings: object())
-    monkeypatch.setattr(main, "build_agent", lambda model, tools: FakeAgent())
+    monkeypatch.setattr(main, "build_agent", lambda model, tools: agent)
+    return agent
 
 
 @asynccontextmanager
@@ -163,7 +177,7 @@ async def test_chat_uses_graph_created_during_lifespan() -> None:
     async with build_test_client() as client:
         response = await client.post(
             "/threads/thread-1/messages",
-            json={"message": "hello"},
+            json=chat_payload("hello"),
         )
 
     assert response.status_code == 200
@@ -176,11 +190,74 @@ async def test_chat_uses_graph_created_during_lifespan() -> None:
 
 
 @pytest.mark.anyio
+async def test_chat_passes_stable_message_id_to_graph(fake_agent: FakeAgent) -> None:
+    async with build_test_client() as client:
+        response = await client.post(
+            "/threads/thread-with-message-id/messages",
+            json=chat_payload("hello"),
+        )
+
+    submitted_message = fake_agent.inputs["thread-with-message-id"][0]["messages"][0]
+    assert response.status_code == 200
+    assert isinstance(submitted_message, HumanMessage)
+    assert submitted_message.id == MESSAGE_ID
+
+
+@pytest.mark.anyio
+async def test_chat_requires_message_id() -> None:
+    async with build_test_client() as client:
+        response = await client.post(
+            "/threads/thread-without-message-id/messages",
+            json={"message": "hello"},
+        )
+
+    assert response.status_code == 422
+
+
+@pytest.mark.anyio
+async def test_retry_with_same_message_id_does_not_duplicate_history(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    attempts = 0
+    observed_message_ids: list[list[str | None]] = []
+
+    async def flaky_model(state: MessagesState) -> dict[str, list[AIMessage]]:
+        nonlocal attempts
+        attempts += 1
+        observed_message_ids.append([message.id for message in state["messages"]])
+        if attempts == 1:
+            raise RuntimeError("provider unavailable")
+        return {"messages": [AIMessage(content="Agent API works")]}
+
+    builder = StateGraph(MessagesState)
+    builder.add_node("model", flaky_model)
+    builder.set_entry_point("model")
+    builder.add_edge("model", END)
+    graph = builder.compile(checkpointer=InMemorySaver())
+    monkeypatch.setattr(main, "build_agent", lambda model, tools: graph)
+
+    async with build_test_client() as client:
+        with pytest.raises(RuntimeError, match="provider unavailable"):
+            await client.post(
+                "/threads/thread-retry/messages",
+                json=chat_payload("hello"),
+            )
+
+        response = await client.post(
+            "/threads/thread-retry/messages",
+            json=chat_payload("hello"),
+        )
+
+    assert response.status_code == 200
+    assert observed_message_ids == [[MESSAGE_ID], [MESSAGE_ID]]
+
+
+@pytest.mark.anyio
 async def test_chat_returns_only_text_from_structured_model_content() -> None:
     async with build_test_client() as client:
         response = await client.post(
             "/threads/thread-structured/messages",
-            json={"message": "structured response"},
+            json=chat_payload("structured response"),
         )
 
     assert response.status_code == 200
@@ -192,7 +269,7 @@ async def test_tool_call_can_be_approved_and_resumed() -> None:
     async with build_test_client() as client:
         interrupted = await client.post(
             "/threads/thread-approval/messages",
-            json={"message": "/tool create_issue hello"},
+            json=chat_payload("/tool create_issue hello"),
         )
 
         assert interrupted.status_code == 200
@@ -220,7 +297,7 @@ async def test_tool_call_can_be_denied_without_execution() -> None:
     async with build_test_client() as client:
         interrupted = await client.post(
             "/threads/thread-denial/messages",
-            json={"message": "/tool create_issue do-not-run"},
+            json=chat_payload("/tool create_issue do-not-run"),
         )
         approval = interrupted.json()["approval"]
 

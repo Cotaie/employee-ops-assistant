@@ -3,6 +3,7 @@ from typing import Annotated, cast
 from contracts import ApprovalRequest, ChatRequest
 from fastapi import APIRouter, Depends, HTTPException, status
 from langchain.agents.middleware.types import InputAgentState, OutputAgentState
+from langchain_core.messages import HumanMessage
 from langgraph.types import Command, GraphOutput
 
 from agent_api.app.dependencies.agent import ThreadGraphContext, get_thread_graph_context
@@ -49,7 +50,14 @@ async def send_message(
     result = await context.graph.ainvoke(
         cast(
             InputAgentState,
-            {"messages": [{"role": "user", "content": request.message}]},
+            {
+                "messages": [
+                    HumanMessage(
+                        id=str(request.message_id),
+                        content=request.message,
+                    )
+                ]
+            },
         ),
         config=context.config,
         version="v2",

@@ -28,7 +28,7 @@ def build_agent(
                 },
                 "github_create_issue": {
                     "allowed_decisions": ["approve", "reject"],
-                }
+                },
             }
         )
     ]
