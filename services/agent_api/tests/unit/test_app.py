@@ -77,6 +77,24 @@ class FakeAgent:
             self.pending[thread_id] = pending
             return SimpleNamespace(interrupts=[pending], value=None)
 
+        if message == "structured response":
+            return SimpleNamespace(
+                interrupts=[],
+                value={
+                    "messages": [
+                        AIMessage(
+                            content=[
+                                {
+                                    "type": "text",
+                                    "text": "Agent API works",
+                                    "extras": {"signature": "provider-metadata"},
+                                }
+                            ]
+                        )
+                    ]
+                },
+            )
+
         return SimpleNamespace(
             interrupts=[],
             value={"messages": [AIMessage(content=f"Agent skeleton received: {message}")]},
@@ -117,10 +135,10 @@ def test_settings_are_cached() -> None:
 
 
 def test_llm_settings_use_openai_defaults() -> None:
-    settings = Settings(OPENAI_API_KEY=SecretStr("secret-key"))
+    settings = Settings(_env_file=None, LLM_API_KEY=SecretStr("secret-key"))
 
     assert settings.llm_model == "openai:gpt-5.4-mini"
-    assert settings.openai_api_key == SecretStr("secret-key")
+    assert settings.llm_api_key == SecretStr("secret-key")
 
 
 @pytest.mark.anyio
@@ -155,6 +173,18 @@ async def test_chat_uses_graph_created_during_lifespan() -> None:
         "message": "Agent skeleton received: hello",
         "approval": None,
     }
+
+
+@pytest.mark.anyio
+async def test_chat_returns_only_text_from_structured_model_content() -> None:
+    async with build_test_client() as client:
+        response = await client.post(
+            "/threads/thread-structured/messages",
+            json={"message": "structured response"},
+        )
+
+    assert response.status_code == 200
+    assert response.json()["message"] == "Agent API works"
 
 
 @pytest.mark.anyio

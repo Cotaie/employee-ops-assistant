@@ -19,7 +19,7 @@ def test_create_chat_model_uses_llm_settings(
         return model
 
     monkeypatch.setattr(llm_client, "init_chat_model", fake_init_chat_model)
-    settings = Settings(OPENAI_API_KEY=SecretStr("secret-key"))
+    settings = Settings(_env_file=None, LLM_API_KEY=SecretStr("secret-key"))
 
     result = llm_client.create_chat_model(settings)
 
@@ -34,5 +34,5 @@ def test_create_chat_model_uses_llm_settings(
 
 
 def test_create_chat_model_requires_api_key() -> None:
-    with pytest.raises(ValueError, match="OPENAI_API_KEY"):
-        llm_client.create_chat_model(Settings())
+    with pytest.raises(ValueError, match="LLM_API_KEY"):
+        llm_client.create_chat_model(Settings(_env_file=None))

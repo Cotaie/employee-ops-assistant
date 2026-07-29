@@ -26,6 +26,7 @@ def test_create_github_client_uses_pat(
     monkeypatch.setattr(github_client, "Auth", FakeAuth)
     monkeypatch.setattr(github_client, "Github", FakeGithub)
     settings = Settings(
+        _env_file=None,
         GITHUB_API_TOKEN=SecretStr("github_pat_secret"),
         GITHUB_REPOSITORY="owner/repository",
     )
@@ -38,4 +39,6 @@ def test_create_github_client_uses_pat(
 
 def test_create_github_client_requires_complete_configuration() -> None:
     with pytest.raises(ValueError, match="GITHUB_API_TOKEN"):
-        github_client.create_github_client(Settings(GITHUB_REPOSITORY="owner/repository"))
+        github_client.create_github_client(
+            Settings(_env_file=None, GITHUB_REPOSITORY="owner/repository")
+        )

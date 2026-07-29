@@ -3,6 +3,7 @@
   "python.analysis.extraPaths": [
     "${workspaceFolder}/libs/clients/src",
     "${workspaceFolder}/libs/contracts/src",
+    "${workspaceFolder}/services/agent_api/src",
     "${workspaceFolder}/services/embeddings_api/src",
     "${workspaceFolder}/services/ingestion_api/src"
   ],

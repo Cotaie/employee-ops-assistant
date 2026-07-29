@@ -1,13 +1,14 @@
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 
+from atlassian import Jira
 from fastapi import FastAPI
 from github import Github
 from langchain_core.tools import BaseTool
 
 from agent_api.app.api.routes import register_routes
 from agent_api.app.clients.github import create_github_client
-from agent_api.app.clients.jira import create_jira_wrapper
+from agent_api.app.clients.jira import create_jira_client
 from agent_api.app.clients.llm import create_chat_model
 from agent_api.app.core.config import get_settings
 from agent_api.app.services.agent import build_agent
@@ -20,10 +21,11 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     settings = get_settings()
     jira_tools: list[BaseTool] = []
     github_tools: list[BaseTool] = []
+    jira: Jira | None = None
     github: Github | None = None
 
     try:
-        jira = create_jira_wrapper(settings)
+        jira = create_jira_client(settings)
         jira_tools = create_jira_tools(jira)
     except ValueError:
         pass
@@ -43,6 +45,8 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     try:
         yield
     finally:
+        if jira is not None:
+            jira.close()
         if github is not None:
             github.close()
 

@@ -1,12 +1,29 @@
-from langchain_community.agent_toolkits.jira.toolkit import JiraToolkit
-from langchain_community.utilities.jira import JiraAPIWrapper
-from langchain_core.tools import BaseTool
+from typing import Any, cast
 
-COMMON_JIRA_TOOLS = {"jql_query", "get_projects", "create_issue"}
+from atlassian import Jira
+from langchain_core.tools import BaseTool, tool
 
 
-def create_jira_tools(jira: JiraAPIWrapper) -> list[BaseTool]:
-    """Create the allow-listed Jira tools exposed to the agent."""
+def create_jira_tools(jira: Jira) -> list[BaseTool]:
+    """Create the Jira operations exposed to the agent."""
 
-    toolkit = JiraToolkit.from_jira_api_wrapper(jira)
-    return [tool for tool in toolkit.get_tools() if tool.name in COMMON_JIRA_TOOLS]
+    @tool
+    def jql_query(query: str) -> dict[str, Any]:
+        """Search Jira issues using a JQL query."""
+
+        result = jira.jql(query)
+        return {} if result is None else cast(dict[str, Any], result)
+
+    @tool
+    def get_projects() -> list[dict[str, Any]]:
+        """Get all Jira projects visible to the configured user."""
+
+        return cast(list[dict[str, Any]], jira.projects())
+
+    @tool
+    def create_issue(fields: dict[str, Any]) -> dict[str, Any]:
+        """Create a Jira issue from its Jira fields."""
+
+        return cast(dict[str, Any], jira.issue_create(fields))
+
+    return [jql_query, get_projects, create_issue]

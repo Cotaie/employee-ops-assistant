@@ -29,7 +29,7 @@ def _response(
     return {
         "status": "completed",
         "thread_id": thread_id,
-        "message": str(state["messages"][-1].content),
+        "message": state["messages"][-1].text,
         "approval": None,
     }
 
