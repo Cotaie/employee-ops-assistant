@@ -1,3 +1,4 @@
+import json
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from types import SimpleNamespace
@@ -6,14 +7,17 @@ from uuid import UUID
 
 import httpx
 import pytest
-from langchain_core.messages import AIMessage, HumanMessage
+from langchain.agents.middleware.types import InputAgentState
+from langchain_core.messages import AIMessage, AIMessageChunk, HumanMessage
 from langgraph.checkpoint.memory import InMemorySaver
 from langgraph.graph import END, MessagesState, StateGraph
 from langgraph.types import Command
 from pydantic import SecretStr
 
 from agent_api.app import main
+from agent_api.app.api.routes.chat import _stream_graph
 from agent_api.app.core.config import Settings, get_settings
+from agent_api.app.dependencies.agent import ThreadGraphContext
 from agent_api.app.main import create_app
 
 MESSAGE_ID = "c159099f-62d1-4e70-83a4-4b82f6a237f9"
@@ -36,6 +40,60 @@ class FakeAgent:
         pending = self.pending.get(self._thread_id(config))
         tasks = [] if pending is None else [SimpleNamespace(interrupts=[pending])]
         return SimpleNamespace(tasks=tasks)
+
+    async def astream(
+        self,
+        input_value: dict[str, Any] | Command[Any],
+        config: dict[str, Any],
+        *,
+        stream_mode: list[str],
+        version: str,
+    ) -> AsyncIterator[dict[str, Any]]:
+        assert stream_mode == ["messages", "tasks"]
+        assert version == "v2"
+        if not isinstance(input_value, Command):
+            message = cast(str, input_value["messages"][-1].content)
+            if message == "stream error":
+                raise RuntimeError("provider unavailable")
+            if message == "tool activity":
+                yield {
+                    "type": "tasks",
+                    "ns": (),
+                    "data": {
+                        "id": "tool-task",
+                        "name": "tools",
+                        "input": {},
+                        "triggers": [],
+                    },
+                }
+                yield {
+                    "type": "tasks",
+                    "ns": (),
+                    "data": {
+                        "id": "tool-task",
+                        "name": "tools",
+                        "error": None,
+                        "interrupts": [],
+                        "result": {},
+                    },
+                }
+
+        result = await self.ainvoke(input_value, config, version=version)
+        if result.interrupts:
+            return
+
+        content = result.value["messages"][-1].text
+        midpoint = max(1, len(content) // 2)
+        for delta in (content[:midpoint], content[midpoint:]):
+            if delta:
+                yield {
+                    "type": "messages",
+                    "ns": (),
+                    "data": (
+                        AIMessageChunk(content=delta),
+                        {"langgraph_node": "model"},
+                    ),
+                }
 
     async def ainvoke(
         self,
@@ -130,6 +188,14 @@ async def build_test_client() -> AsyncIterator[httpx.AsyncClient]:
             yield client
 
 
+def stream_events(response: httpx.Response) -> list[dict[str, Any]]:
+    return [
+        cast(dict[str, Any], json.loads(line.removeprefix("data: ")))
+        for line in response.text.splitlines()
+        if line.startswith("data: ")
+    ]
+
+
 @pytest.mark.anyio
 async def test_health_returns_service_metadata() -> None:
     async with build_test_client() as client:
@@ -187,6 +253,133 @@ async def test_chat_uses_graph_created_during_lifespan() -> None:
         "message": "Agent skeleton received: hello",
         "approval": None,
     }
+
+
+@pytest.mark.anyio
+async def test_chat_stream_returns_incremental_text_and_completion() -> None:
+    async with build_test_client() as client:
+        response = await client.post(
+            "/threads/thread-stream/messages/stream",
+            json=chat_payload("hello"),
+        )
+
+    events = stream_events(response)
+    assert response.status_code == 200
+    assert response.headers["content-type"].startswith("text/event-stream")
+    assert [event["type"] for event in events] == [
+        "text_delta",
+        "text_delta",
+        "completed",
+    ]
+    assert "".join(cast(str, event["delta"]) for event in events[:-1]) == (
+        "Agent skeleton received: hello"
+    )
+    assert events[-1] == {
+        "type": "completed",
+        "thread_id": "thread-stream",
+    }
+
+
+@pytest.mark.anyio
+async def test_chat_stream_returns_approval_event() -> None:
+    async with build_test_client() as client:
+        response = await client.post(
+            "/threads/thread-stream-approval/messages/stream",
+            json=chat_payload("/tool create_issue hello"),
+        )
+
+    events = stream_events(response)
+    assert [event["type"] for event in events] == ["approval_required"]
+    assert events[0]["approval"]["action_requests"][0]["name"] == "create_issue"
+    assert events[0]["approval"]["interrupt_id"] == "interrupt-thread-stream-approval"
+
+
+@pytest.mark.anyio
+async def test_chat_stream_returns_structured_error_event() -> None:
+    async with build_test_client() as client:
+        response = await client.post(
+            "/threads/thread-stream-error/messages/stream",
+            json=chat_payload("stream error"),
+        )
+
+    assert stream_events(response) == [
+        {
+            "type": "error",
+            "thread_id": "thread-stream-error",
+            "code": "agent_execution_failed",
+            "message": "Agent execution failed.",
+            "retryable": True,
+        }
+    ]
+
+
+@pytest.mark.anyio
+async def test_chat_stream_returns_tool_activity_events() -> None:
+    async with build_test_client() as client:
+        response = await client.post(
+            "/threads/thread-stream-tool/messages/stream",
+            json=chat_payload("tool activity"),
+        )
+
+    events = stream_events(response)
+    tool_events = [event for event in events if event["type"] == "tool_activity"]
+    assert tool_events == [
+        {
+            "type": "tool_activity",
+            "thread_id": "thread-stream-tool",
+            "tool": "tools",
+            "phase": "started",
+        },
+        {
+            "type": "tool_activity",
+            "thread_id": "thread-stream-tool",
+            "tool": "tools",
+            "phase": "completed",
+        },
+    ]
+
+
+@pytest.mark.anyio
+async def test_chat_stream_closes_graph_stream_after_disconnect() -> None:
+    class DisconnectingAgent:
+        closed = False
+
+        async def astream(self, *args: object, **kwargs: object) -> AsyncIterator[dict[str, Any]]:
+            try:
+                yield {
+                    "type": "messages",
+                    "ns": (),
+                    "data": (
+                        AIMessageChunk(content="not delivered"),
+                        {"langgraph_node": "model"},
+                    ),
+                }
+            finally:
+                self.closed = True
+
+    class DisconnectedRequest:
+        async def is_disconnected(self) -> bool:
+            return True
+
+    agent = DisconnectingAgent()
+    context = ThreadGraphContext(
+        graph=cast(Any, agent),
+        config={"configurable": {"thread_id": "thread-disconnected"}},
+        snapshot=cast(Any, SimpleNamespace(tasks=[])),
+    )
+
+    events = [
+        event
+        async for event in _stream_graph(
+            thread_id="thread-disconnected",
+            graph_input=cast(InputAgentState, {"messages": []}),
+            context=context,
+            request=cast(Any, DisconnectedRequest()),
+        )
+    ]
+
+    assert events == []
+    assert agent.closed is True
 
 
 @pytest.mark.anyio

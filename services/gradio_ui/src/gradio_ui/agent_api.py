@@ -1,4 +1,6 @@
-from typing import Any, Literal, TypedDict, cast
+import json
+from collections.abc import AsyncIterator
+from typing import Any, Literal, Required, TypedDict, cast
 
 import httpx
 
@@ -8,6 +10,26 @@ class AgentResponse(TypedDict):
     thread_id: str
     message: str | None
     approval: dict[str, Any] | None
+
+
+class AgentStreamEvent(TypedDict, total=False):
+    type: Required[
+        Literal[
+            "text_delta",
+            "tool_activity",
+            "approval_required",
+            "completed",
+            "error",
+        ]
+    ]
+    thread_id: Required[str]
+    delta: str
+    tool: str
+    phase: Literal["started", "completed", "failed"]
+    approval: dict[str, Any]
+    code: str
+    message: str
+    retryable: bool
 
 
 class AgentApiClient:
@@ -37,6 +59,42 @@ class AgentApiClient:
             json={"message_id": message_id, "message": message},
         )
         return cast(AgentResponse, response)
+
+    async def stream_message(
+        self,
+        thread_id: str,
+        message_id: str,
+        message: str,
+    ) -> AsyncIterator[AgentStreamEvent]:
+        async with httpx.AsyncClient(
+            base_url=self._base_url,
+            timeout=self._timeout,
+            transport=self._transport,
+        ) as client:
+            async with client.stream(
+                "POST",
+                f"/threads/{thread_id}/messages/stream",
+                json={"message_id": message_id, "message": message},
+            ) as response:
+                response.raise_for_status()
+                data_lines: list[str] = []
+                async for line in response.aiter_lines():
+                    if not line:
+                        if data_lines:
+                            yield cast(
+                                AgentStreamEvent,
+                                json.loads("\n".join(data_lines)),
+                            )
+                            data_lines.clear()
+                        continue
+                    if line.startswith("data:"):
+                        data_lines.append(line.removeprefix("data:").lstrip())
+
+                if data_lines:
+                    yield cast(
+                        AgentStreamEvent,
+                        json.loads("\n".join(data_lines)),
+                    )
 
     async def resolve_approval(
         self,

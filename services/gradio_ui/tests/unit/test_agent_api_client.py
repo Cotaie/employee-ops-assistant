@@ -48,3 +48,34 @@ async def test_agent_api_client_uses_thread_message_and_approval_endpoints() -> 
         "interrupt_id": "interrupt-1",
         "approved": True,
     }
+
+
+@pytest.mark.anyio
+async def test_agent_api_client_parses_sse_message_stream() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        assert request.url.path == "/threads/thread-1/messages/stream"
+        return httpx.Response(
+            200,
+            headers={"content-type": "text/event-stream"},
+            text=(
+                'event: text_delta\ndata: {"type":"text_delta","thread_id":"thread-1",'
+                '"delta":"Agent "}\n\n'
+                'event: text_delta\ndata: {"type":"text_delta","thread_id":"thread-1",'
+                '"delta":"works"}\n\n'
+                'event: completed\ndata: {"type":"completed","thread_id":"thread-1"}\n\n'
+            ),
+        )
+
+    client = AgentApiClient(
+        "http://agent-api",
+        transport=httpx.MockTransport(handler),
+    )
+
+    events = [event async for event in client.stream_message("thread-1", "message-1", "hello")]
+
+    assert [event["type"] for event in events] == [
+        "text_delta",
+        "text_delta",
+        "completed",
+    ]
+    assert events[0]["delta"] == "Agent "

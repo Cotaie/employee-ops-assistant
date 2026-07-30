@@ -1,11 +1,12 @@
 import os
-from typing import Any, Literal, NamedTuple, Protocol
+from collections.abc import AsyncIterator
+from typing import Any, Literal, NamedTuple, Protocol, cast
 from uuid import uuid4
 
 import gradio as gr
 import httpx
 
-from gradio_ui.agent_api import AgentApiClient, AgentResponse
+from gradio_ui.agent_api import AgentApiClient, AgentResponse, AgentStreamEvent
 
 ChatHistory = list[dict[str, str]]
 PendingMessage = dict[str, str]
@@ -22,6 +23,13 @@ class AgentApi(Protocol):
         message_id: str,
         message: str,
     ) -> AgentResponse: ...
+
+    def stream_message(
+        self,
+        thread_id: str,
+        message_id: str,
+        message: str,
+    ) -> AsyncIterator[AgentStreamEvent]: ...
 
     async def resolve_approval(
         self,
@@ -115,32 +123,116 @@ async def _deliver_message(
     thread_id: str | None,
     pending_message: PendingMessage,
     client: AgentApi,
-) -> UiResult:
+) -> AsyncIterator[UiResult]:
     active_thread_id = thread_id
+    base_history = [*history]
+    streamed_history = [*history]
+    assistant_started = False
+    terminal_event_received = False
     try:
         if active_thread_id is None:
             active_thread_id = await client.create_thread()
-        response = await client.send_message(
+        async for event in client.stream_message(
             active_thread_id,
             pending_message["message_id"],
             pending_message["message"],
-        )
+        ):
+            event_type = event["type"]
+            if event_type == "text_delta":
+                delta = event.get("delta", "")
+                if not delta:
+                    continue
+                if assistant_started:
+                    previous = streamed_history[-1]["content"]
+                    streamed_history[-1] = {
+                        "role": "assistant",
+                        "content": previous + delta,
+                    }
+                else:
+                    streamed_history.append({"role": "assistant", "content": delta})
+                    assistant_started = True
+                yield _ui_result(
+                    [*streamed_history],
+                    active_thread_id,
+                    None,
+                    None,
+                    "Generating...",
+                )
+                continue
+
+            if event_type == "tool_activity":
+                phase = event.get("phase", "started")
+                tool = event.get("tool", "external tool")
+                yield _ui_result(
+                    [*streamed_history],
+                    active_thread_id,
+                    None,
+                    None,
+                    f"Tool activity: {tool} {phase}.",
+                )
+                continue
+
+            if event_type == "approval_required":
+                approval = event.get("approval")
+                if approval is None:
+                    continue
+                terminal_event_received = True
+                response: AgentResponse = {
+                    "status": "approval_required",
+                    "thread_id": active_thread_id,
+                    "message": None,
+                    "approval": approval,
+                }
+                updated_history, pending_approval = _apply_response(
+                    streamed_history,
+                    response,
+                )
+                yield _ui_result(
+                    updated_history,
+                    active_thread_id,
+                    None,
+                    pending_approval,
+                )
+                continue
+
+            if event_type == "completed":
+                terminal_event_received = True
+                yield _ui_result(
+                    [*streamed_history],
+                    active_thread_id,
+                    None,
+                    None,
+                )
+                continue
+
+            if event_type == "error":
+                terminal_event_received = True
+                message = event.get("message", "Agent execution failed.")
+                yield _ui_result(
+                    base_history,
+                    active_thread_id,
+                    pending_message,
+                    None,
+                    f"AgentApi stream failed: {message}",
+                )
     except httpx.HTTPError as exc:
-        return _ui_result(
-            history,
+        yield _ui_result(
+            base_history,
             active_thread_id,
             pending_message,
             None,
             f"AgentApi request failed: {type(exc).__name__}: {exc}",
         )
+        return
 
-    updated_history, pending_approval = _apply_response(history, response)
-    return _ui_result(
-        updated_history,
-        active_thread_id,
-        None,
-        pending_approval,
-    )
+    if not terminal_event_received:
+        yield _ui_result(
+            base_history,
+            active_thread_id,
+            pending_message,
+            None,
+            "AgentApi stream ended before completion.",
+        )
 
 
 async def _send_message(
@@ -148,23 +240,26 @@ async def _send_message(
     history: ChatHistory | None,
     thread_id: str | None,
     client: AgentApi,
-) -> UiResult:
+) -> AsyncIterator[UiResult]:
     clean_message = message.strip()
     current_history = [] if history is None else [*history]
     if not clean_message:
-        return _ui_result(current_history, thread_id, None, None, "Enter a message.")
+        yield _ui_result(current_history, thread_id, None, None, "Enter a message.")
+        return
 
     pending_message = {
         "message_id": str(uuid4()),
         "message": clean_message,
     }
     current_history.append({"role": "user", "content": clean_message})
-    return await _deliver_message(
+    yield _ui_result(current_history, thread_id, None, None, "Generating...")
+    async for result in _deliver_message(
         current_history,
         thread_id,
         pending_message,
         client,
-    )
+    ):
+        yield result
 
 
 async def _retry_message(
@@ -172,16 +267,19 @@ async def _retry_message(
     thread_id: str | None,
     pending_message: PendingMessage | None,
     client: AgentApi,
-) -> UiResult:
+) -> AsyncIterator[UiResult]:
     current_history = [] if history is None else [*history]
     if pending_message is None:
-        return _ui_result(current_history, thread_id, None, None)
-    return await _deliver_message(
+        yield _ui_result(current_history, thread_id, None, None)
+        return
+    yield _ui_result(current_history, thread_id, None, None, "Generating...")
+    async for result in _deliver_message(
         current_history,
         thread_id,
         pending_message,
         client,
-    )
+    ):
+        yield result
 
 
 async def _resolve_approval(
@@ -229,16 +327,23 @@ async def send_message(
     message: str,
     history: ChatHistory | None,
     thread_id: str | None,
-) -> UiResult:
-    return await _send_message(message, history, thread_id, agent_api_client)
+) -> AsyncIterator[UiResult]:
+    async for result in _send_message(message, history, thread_id, agent_api_client):
+        yield result
 
 
 async def retry_message(
     history: ChatHistory | None,
     thread_id: str | None,
     pending_message: PendingMessage | None,
-) -> UiResult:
-    return await _retry_message(history, thread_id, pending_message, agent_api_client)
+) -> AsyncIterator[UiResult]:
+    async for result in _retry_message(
+        history,
+        thread_id,
+        pending_message,
+        agent_api_client,
+    ):
+        yield result
 
 
 async def approve_tool(
@@ -315,7 +420,7 @@ def create_app() -> gr.Blocks:
         approve_button.click(approve_tool, inputs=approval_inputs, outputs=outputs)
         reject_button.click(reject_tool, inputs=approval_inputs, outputs=outputs)
 
-    return app
+    return cast(gr.Blocks, app)
 
 
 app = create_app()

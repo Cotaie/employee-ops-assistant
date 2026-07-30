@@ -1,4 +1,4 @@
-from collections.abc import AsyncIterator
+from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 
 from atlassian import Jira
@@ -17,7 +17,7 @@ from agent_api.app.tools.jira import create_jira_tools
 
 
 @asynccontextmanager
-async def lifespan(app: FastAPI) -> AsyncIterator[None]:
+async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
     settings = get_settings()
     jira_tools: list[BaseTool] = []
     github_tools: list[BaseTool] = []

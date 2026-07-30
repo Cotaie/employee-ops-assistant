@@ -3,7 +3,7 @@ from typing import Any
 import httpx
 import pytest
 
-from gradio_ui.agent_api import AgentResponse
+from gradio_ui.agent_api import AgentResponse, AgentStreamEvent
 from gradio_ui.main import _resolve_approval, _retry_message, _send_message
 
 
@@ -12,6 +12,22 @@ class FakeAgentApiClient:
         self.message_calls: list[tuple[str, str, str]] = []
         self.approval_calls: list[tuple[str, str, bool]] = []
         self.fail_next_message = False
+        self.stream_events: list[AgentStreamEvent] = [
+            {
+                "type": "text_delta",
+                "thread_id": "thread-1",
+                "delta": "Agent API ",
+            },
+            {
+                "type": "text_delta",
+                "thread_id": "thread-1",
+                "delta": "works",
+            },
+            {
+                "type": "completed",
+                "thread_id": "thread-1",
+            },
+        ]
         self.response: AgentResponse = {
             "status": "completed",
             "thread_id": "thread-1",
@@ -34,6 +50,19 @@ class FakeAgentApiClient:
             raise httpx.ConnectError("AgentApi unavailable")
         return self.response
 
+    async def stream_message(
+        self,
+        thread_id: str,
+        message_id: str,
+        message: str,
+    ):
+        self.message_calls.append((thread_id, message_id, message))
+        if self.fail_next_message:
+            self.fail_next_message = False
+            raise httpx.ConnectError("AgentApi unavailable")
+        for event in self.stream_events:
+            yield event
+
     async def resolve_approval(
         self,
         thread_id: str,
@@ -54,7 +83,8 @@ class FakeAgentApiClient:
 async def test_send_message_creates_thread_and_displays_response() -> None:
     client = FakeAgentApiClient()
 
-    result = await _send_message("hello", [], None, client)
+    results = [result async for result in _send_message("hello", [], None, client)]
+    result = results[-1]
 
     assert result.thread_id == "thread-1"
     assert result.pending_message is None
@@ -62,6 +92,7 @@ async def test_send_message_creates_thread_and_displays_response() -> None:
         {"role": "user", "content": "hello"},
         {"role": "assistant", "content": "Agent API works"},
     ]
+    assert results[1].history[-1] == {"role": "assistant", "content": "Agent API "}
     assert client.message_calls[0][2] == "hello"
 
 
@@ -70,13 +101,18 @@ async def test_retry_reuses_message_id_after_agent_api_failure() -> None:
     client = FakeAgentApiClient()
     client.fail_next_message = True
 
-    failed = await _send_message("hello", [], None, client)
-    retried = await _retry_message(
-        failed.history,
-        failed.thread_id,
-        failed.pending_message,
-        client,
-    )
+    failed_results = [result async for result in _send_message("hello", [], None, client)]
+    failed = failed_results[-1]
+    retried_results = [
+        result
+        async for result in _retry_message(
+            failed.history,
+            failed.thread_id,
+            failed.pending_message,
+            client,
+        )
+    ]
+    retried = retried_results[-1]
 
     assert failed.pending_message is not None
     assert failed.thread_id == "thread-1"
@@ -84,6 +120,28 @@ async def test_retry_reuses_message_id_after_agent_api_failure() -> None:
     assert retried.pending_message is None
     assert client.message_calls[0][1] == client.message_calls[1][1]
     assert retried.history[-1] == {"role": "assistant", "content": "Agent API works"}
+
+
+@pytest.mark.anyio
+async def test_send_message_displays_streamed_approval() -> None:
+    client = FakeAgentApiClient()
+    client.stream_events = [
+        {
+            "type": "approval_required",
+            "thread_id": "thread-1",
+            "approval": {
+                "interrupt_id": "interrupt-1",
+                "action_requests": [{"name": "create_issue", "args": {}}],
+            },
+        }
+    ]
+
+    results = [result async for result in _send_message("create it", [], None, client)]
+    result = results[-1]
+
+    assert result.pending_approval is not None
+    assert result.pending_approval["interrupt_id"] == "interrupt-1"
+    assert result.history[-1]["content"] == "Approval required for `create_issue`."
 
 
 @pytest.mark.anyio
