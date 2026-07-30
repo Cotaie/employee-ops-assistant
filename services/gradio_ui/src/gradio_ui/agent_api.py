@@ -15,7 +15,7 @@ class AgentApiClient:
         self,
         base_url: str,
         *,
-        timeout: float = 30,
+        timeout: float = 300,
         transport: httpx.AsyncBaseTransport | None = None,
     ) -> None:
         self._base_url = base_url.rstrip("/")

@@ -15,6 +15,20 @@ AgentGraph = CompiledStateGraph[
     OutputAgentState[None],
 ]
 
+AGENT_SYSTEM_PROMPT = """You are the Employee Ops Assistant.
+
+Use the conversation history to answer general conversation and personal-context questions.
+Answer directly without tools when the request can be handled from the conversation.
+
+Only call Jira or GitHub tools when the user explicitly requests information or an action
+that requires those external systems. Never call external tools for greetings, identity
+questions, memory questions, or ordinary conversation.
+
+When a tool is required, follow its argument schema exactly. Ask a clarifying question when
+required information is missing. Do not print raw tool-call JSON as an assistant response,
+and do not claim that an external action succeeded until its tool result confirms success.
+"""
+
 
 def build_agent(
     model: BaseChatModel,
@@ -33,4 +47,10 @@ def build_agent(
         )
     ]
     checkpointer = InMemorySaver()
-    return create_agent(model=model, tools=tools, middleware=middleware, checkpointer=checkpointer)
+    return create_agent(
+        model=model,
+        tools=tools,
+        system_prompt=AGENT_SYSTEM_PROMPT,
+        middleware=middleware,
+        checkpointer=checkpointer,
+    )

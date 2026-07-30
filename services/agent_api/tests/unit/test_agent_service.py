@@ -28,6 +28,7 @@ def test_build_agent_configures_tools_hitl_and_checkpointer(
     assert result is compiled_agent
     assert captured["model"] is model
     assert captured["tools"] is tools
+    assert captured["system_prompt"] == agent_service.AGENT_SYSTEM_PROMPT
     assert isinstance(captured["checkpointer"], InMemorySaver)
     middleware = cast(list[object], captured["middleware"])
     assert len(middleware) == 1

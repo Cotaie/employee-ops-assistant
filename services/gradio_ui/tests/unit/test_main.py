@@ -80,6 +80,7 @@ async def test_retry_reuses_message_id_after_agent_api_failure() -> None:
 
     assert failed.pending_message is not None
     assert failed.thread_id == "thread-1"
+    assert failed.status == "AgentApi request failed: ConnectError: AgentApi unavailable"
     assert retried.pending_message is None
     assert client.message_calls[0][1] == client.message_calls[1][1]
     assert retried.history[-1] == {"role": "assistant", "content": "Agent API works"}

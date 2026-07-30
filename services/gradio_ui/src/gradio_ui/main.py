@@ -47,6 +47,7 @@ class UiResult(NamedTuple):
 
 agent_api_client = AgentApiClient(
     os.getenv("AGENT_API_URL", "http://127.0.0.1:8000"),
+    timeout=float(os.getenv("AGENT_API_TIMEOUT_SECONDS", "300")),
 )
 
 
@@ -130,7 +131,7 @@ async def _deliver_message(
             active_thread_id,
             pending_message,
             None,
-            f"AgentApi request failed: {exc}",
+            f"AgentApi request failed: {type(exc).__name__}: {exc}",
         )
 
     updated_history, pending_approval = _apply_response(history, response)
@@ -217,7 +218,7 @@ async def _resolve_approval(
             thread_id,
             None,
             pending_approval,
-            f"AgentApi request failed: {exc}",
+            f"AgentApi request failed: {type(exc).__name__}: {exc}",
         )
 
     updated_history, next_approval = _apply_response(current_history, response)
