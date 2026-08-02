@@ -1,5 +1,8 @@
+from typing import cast
+
 import httpx
 import pytest
+from chromadb.api.models.AsyncCollection import AsyncCollection
 from clients.chroma import ChromaChunkRecord, ChromaClient, ChromaStoredRecord
 from clients.embeddings_api import EmbeddingsApiClient
 from contracts import EmbeddingsResponse
@@ -75,6 +78,27 @@ class FakeChromaClient(ChromaClient):
             self.stored_records = [
                 record for record in self.stored_records if record.chunk_id not in matching_ids
             ]
+
+
+class FakeAsyncChromaClient:
+    async def get_or_create_collection(
+        self,
+        **kwargs: object,
+    ) -> AsyncCollection:
+        del kwargs
+        return cast(AsyncCollection, object())
+
+
+@pytest.fixture(autouse=True)
+def fake_chroma_startup(monkeypatch: pytest.MonkeyPatch) -> None:
+    async def create_client(**kwargs: object) -> FakeAsyncChromaClient:
+        del kwargs
+        return FakeAsyncChromaClient()
+
+    monkeypatch.setattr(
+        "ingestion_api.app.main.chromadb.AsyncHttpClient",
+        create_client,
+    )
 
 
 def _temporary_document_payload() -> dict[str, object]:
@@ -218,12 +242,12 @@ async def test_document_management_routes_exist_as_placeholders(
     expected_status: int,
 ) -> None:
     app = create_app()
-    app.state.ingestion_service = IngestionService(
-        chroma_client=FakeChromaClient(),
-        embeddings_client=FakeEmbeddingsApiClient(),
-    )
 
     async with app.router.lifespan_context(app):
+        app.state.ingestion_service = IngestionService(
+            chroma_client=FakeChromaClient(),
+            embeddings_client=FakeEmbeddingsApiClient(),
+        )
         transport = httpx.ASGITransport(app=app)
         async with httpx.AsyncClient(
             transport=transport,

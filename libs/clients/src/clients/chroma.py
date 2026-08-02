@@ -1,7 +1,7 @@
 from dataclasses import dataclass
 from typing import Any
 
-import chromadb
+from chromadb.api.models.AsyncCollection import AsyncCollection
 from chromadb.api.types import IncludeEnum, PyEmbeddings
 
 
@@ -21,28 +21,30 @@ class ChromaStoredRecord:
     metadata: dict[str, Any]
 
 
+@dataclass(slots=True)
+class ChromaQueryRecord:
+    chunk_id: str
+    document: str
+    distance: float
+    metadata: dict[str, Any]
+
+
 class ChromaClient:
-    """Client for writing chunk records into Chroma."""
+    """Client for accessing chunk records in Chroma."""
 
     def __init__(
         self,
         *,
-        host: str,
-        port: int,
-        collection_name: str,
+        collection: AsyncCollection,
     ) -> None:
-        self._host = host
-        self._port = port
-        self._collection_name = collection_name
+        self._collection = collection
 
     async def upsert_chunks(self, records: list[ChromaChunkRecord]) -> None:
         if not records:
             return
 
-        client = chromadb.HttpClient(host=self._host, port=self._port)
-        collection = client.get_or_create_collection(name=self._collection_name)
         embeddings: PyEmbeddings = [record.embedding for record in records]
-        collection.upsert(
+        await self._collection.upsert(
             ids=[record.chunk_id for record in records],
             documents=[record.document for record in records],
             embeddings=embeddings,
@@ -54,9 +56,7 @@ class ChromaClient:
         *,
         where: dict[str, Any] | None = None,
     ) -> list[ChromaStoredRecord]:
-        client = chromadb.HttpClient(host=self._host, port=self._port)
-        collection = client.get_or_create_collection(name=self._collection_name)
-        result = collection.get(
+        result = await self._collection.get(
             where=where,
             include=[
                 IncludeEnum.documents,
@@ -90,9 +90,43 @@ class ChromaClient:
         ids: list[str] | None = None,
         where: dict[str, Any] | None = None,
     ) -> None:
-        client = chromadb.HttpClient(host=self._host, port=self._port)
-        collection = client.get_or_create_collection(name=self._collection_name)
-        collection.delete(
+        await self._collection.delete(
             ids=ids,
             where=where,
         )
+
+    async def query_chunks(
+        self,
+        *,
+        query_embedding: list[float],
+        top_k: int,
+        where: dict[str, Any] | None = None,
+    ) -> list[ChromaQueryRecord]:
+        query_embeddings: PyEmbeddings = [query_embedding]
+        result = await self._collection.query(
+            query_embeddings=query_embeddings,
+            n_results=top_k,
+            where=where,
+            include=[
+                IncludeEnum.documents,
+                IncludeEnum.metadatas,
+                IncludeEnum.distances,
+            ],
+        )
+
+        ids = result["ids"][0] if result["ids"] else []
+        documents = result["documents"][0] if result["documents"] else []
+        distances = result["distances"][0] if result["distances"] else []
+        metadatas = result["metadatas"][0] if result["metadatas"] else []
+
+        return [
+            ChromaQueryRecord(
+                chunk_id=chunk_id,
+                document=documents[index],
+                distance=distances[index],
+                metadata=(
+                    dict(metadatas[index]) if index < len(metadatas) and metadatas[index] else {}
+                ),
+            )
+            for index, chunk_id in enumerate(ids)
+        ]

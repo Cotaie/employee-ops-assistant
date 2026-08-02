@@ -1,6 +1,6 @@
 services:
   chroma:
-    image: chromadb/chroma:0.5.23
+    image: chromadb/chroma:0.6.3
     container_name: employee-ops-chroma
     restart: unless-stopped
     ports:
