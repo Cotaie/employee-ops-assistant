@@ -1,9 +1,11 @@
-from typing import Any
+from typing import Any, cast
 
 import httpx
 import pytest
+from chromadb.api.models.AsyncCollection import AsyncCollection
 
 from retrieve_api.app.main import create_app
+from retrieve_api.app.services.retrieve import RetrievalService
 
 
 class FakeRetrievalService:
@@ -23,6 +25,33 @@ class FakeRetrievalService:
                 },
             }
         ]
+
+
+class FakeAsyncChromaClient:
+    async def get_or_create_collection(
+        self,
+        **kwargs: object,
+    ) -> AsyncCollection:
+        del kwargs
+        return cast(AsyncCollection, object())
+
+
+@pytest.mark.anyio
+async def test_lifespan_configures_retrieval_service(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    async def create_client(**kwargs: object) -> FakeAsyncChromaClient:
+        del kwargs
+        return FakeAsyncChromaClient()
+
+    monkeypatch.setattr(
+        "retrieve_api.app.main.chromadb.AsyncHttpClient",
+        create_client,
+    )
+    app = create_app()
+
+    async with app.router.lifespan_context(app):
+        assert isinstance(app.state.retrieval_service, RetrievalService)
 
 
 @pytest.mark.anyio
