@@ -1,4 +1,22 @@
 services:
+  postgres:
+    image: postgres:17
+    container_name: employee-ops-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: agent_checkpoints
+      POSTGRES_USER: agent
+      POSTGRES_PASSWORD: agent
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U agent -d agent_checkpoints"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+
   chroma:
     image: chromadb/chroma:0.6.3
     container_name: employee-ops-chroma
@@ -69,12 +87,16 @@ services:
       dockerfile: services/agent_api/Dockerfile
     container_name: employee-ops-agent-api
     restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
     env_file:
       - ../services/agent_api/.env
     environment:
       SERVICE_NAME: agent-api
       SERVICE_VERSION: docker
       OLLAMA_BASE_URL: http://host.docker.internal:11434
+      DATABASE_URL: postgresql://agent:agent@postgres:5432/agent_checkpoints
     ports:
       - "8003:8000"
 
@@ -94,3 +116,4 @@ services:
 
 volumes:
   chroma-data:
+  postgres-data:

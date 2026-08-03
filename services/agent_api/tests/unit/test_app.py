@@ -3,6 +3,7 @@ from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from types import SimpleNamespace
 from typing import Any, cast
+from unittest.mock import AsyncMock
 from uuid import UUID
 
 import httpx
@@ -174,8 +175,19 @@ class FakeAgent:
 @pytest.fixture(autouse=True)
 def fake_agent(monkeypatch: pytest.MonkeyPatch) -> FakeAgent:
     agent = FakeAgent()
+
+    @asynccontextmanager
+    async def from_conn_string(database_url: str):
+        del database_url
+        yield AsyncMock()
+
+    monkeypatch.setattr(
+        main.AsyncPostgresSaver,
+        "from_conn_string",
+        from_conn_string,
+    )
     monkeypatch.setattr(main, "create_chat_model", lambda settings: object())
-    monkeypatch.setattr(main, "build_agent", lambda model, tools: agent)
+    monkeypatch.setattr(main, "build_agent", lambda model, tools, checkpointer: agent)
     return agent
 
 
@@ -427,7 +439,7 @@ async def test_retry_with_same_message_id_does_not_duplicate_history(
     builder.set_entry_point("model")
     builder.add_edge("model", END)
     graph = builder.compile(checkpointer=InMemorySaver())
-    monkeypatch.setattr(main, "build_agent", lambda model, tools: graph)
+    monkeypatch.setattr(main, "build_agent", lambda model, tools, checkpointer: graph)
 
     async with build_test_client() as client:
         with pytest.raises(RuntimeError, match="provider unavailable"):

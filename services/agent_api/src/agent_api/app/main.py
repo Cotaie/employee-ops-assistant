@@ -5,6 +5,7 @@ from atlassian import Jira
 from fastapi import FastAPI
 from github import Github
 from langchain_core.tools import BaseTool
+from langgraph.checkpoint.postgres.aio import AsyncPostgresSaver
 
 from agent_api.app.api.routes import register_routes
 from agent_api.app.clients.github import create_github_client
@@ -37,13 +38,19 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
         except ValueError:
             pass
 
-    model = create_chat_model(settings)
-
-    app.state.settings = settings
-    app.state.agent = build_agent(model, [*jira_tools, *github_tools])
-
     try:
-        yield
+        model = create_chat_model(settings)
+        database_url = settings.database_url.get_secret_value()
+
+        async with AsyncPostgresSaver.from_conn_string(database_url) as checkpointer:
+            await checkpointer.setup()
+            app.state.settings = settings
+            app.state.agent = build_agent(
+                model,
+                [*jira_tools, *github_tools],
+                checkpointer,
+            )
+            yield
     finally:
         if jira is not None:
             jira.close()
