@@ -13,7 +13,7 @@ WORKDIR /app/services/embeddings_api
 RUN uv sync --no-dev
 
 ENV PATH="/app/services/embeddings_api/.venv/bin:${PATH}"
-ENV PYTHONPATH="/app/services/embeddings_api/src"
+ENV PYTHONPATH="/app/libs/contracts/src:/app/services/embeddings_api/src"
 
 EXPOSE 8000
 

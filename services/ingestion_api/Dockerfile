@@ -5,15 +5,13 @@ ENV PYTHONUNBUFFERED=1
 
 WORKDIR /app
 
-COPY libs/contracts /app/libs/contracts
-COPY libs/clients /app/libs/clients
-COPY services/ingestion_api /app/services/ingestion_api
+COPY pyproject.toml uv.lock /app/
+COPY libs /app/libs
+COPY services /app/services
 
-WORKDIR /app/services/ingestion_api
+RUN uv sync --frozen --no-dev --package ingestion-api
 
-RUN uv sync --no-dev
-
-ENV PATH="/app/services/ingestion_api/.venv/bin:${PATH}"
+ENV PATH="/app/.venv/bin:${PATH}"
 ENV PYTHONPATH="/app/services/ingestion_api/src"
 
 EXPOSE 8000

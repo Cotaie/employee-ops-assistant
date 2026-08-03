@@ -5,14 +5,13 @@ ENV PYTHONUNBUFFERED=1
 
 WORKDIR /app
 
-COPY libs/contracts /app/libs/contracts
-COPY services/agent_api /app/services/agent_api
+COPY pyproject.toml uv.lock /app/
+COPY libs /app/libs
+COPY services /app/services
 
-WORKDIR /app/services/agent_api
+RUN uv sync --frozen --no-dev --package agent-api
 
-RUN uv sync --no-dev
-
-ENV PATH="/app/services/agent_api/.venv/bin:${PATH}"
+ENV PATH="/app/.venv/bin:${PATH}"
 ENV PYTHONPATH="/app/services/agent_api/src"
 
 EXPOSE 8000
