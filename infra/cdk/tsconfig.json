@@ -1,0 +1,21 @@
+{
+  "compilerOptions": {
+    "alwaysStrict": true,
+    "esModuleInterop": true,
+    "forceConsistentCasingInFileNames": true,
+    "inlineSourceMap": true,
+    "inlineSources": true,
+    "lib": ["es2022"],
+    "module": "commonjs",
+    "noFallthroughCasesInSwitch": true,
+    "noImplicitAny": true,
+    "noImplicitReturns": true,
+    "noImplicitThis": true,
+    "resolveJsonModule": true,
+    "strict": true,
+    "strictNullChecks": true,
+    "target": "ES2022",
+    "typeRoots": ["./node_modules/@types"]
+  },
+  "include": ["bin/**/*.ts", "lib/**/*.ts", "test/**/*.ts"]
+}
