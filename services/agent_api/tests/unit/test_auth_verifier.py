@@ -1,3 +1,4 @@
+import logging
 from datetime import UTC, datetime, timedelta
 
 import jwt
@@ -38,11 +39,12 @@ def token_for(
     *,
     audience: str = AUDIENCE,
     expires_at: datetime | None = None,
+    issuer: str = ISSUER,
 ) -> str:
     now = datetime.now(UTC)
     return jwt.encode(
         {
-            "iss": ISSUER,
+            "iss": issuer,
             "aud": audience,
             "sub": "google-user-123",
             "email": "employee@example.com",
@@ -74,9 +76,30 @@ def test_verifier_returns_authenticated_identity(
     assert user.email_verified is True
 
 
+def test_verifier_accepts_legacy_google_issuer(
+    signing_key: rsa.RSAPrivateKey,
+) -> None:
+    user = verifier_for(signing_key).verify(token_for(signing_key, issuer="accounts.google.com"))
+
+    assert user.subject == "google-user-123"
+
+
 def test_verifier_rejects_wrong_audience(signing_key: rsa.RSAPrivateKey) -> None:
     with pytest.raises(TokenVerificationError):
         verifier_for(signing_key).verify(token_for(signing_key, audience="different-client"))
+
+
+def test_verifier_logs_rejection_reason_without_token(
+    signing_key: rsa.RSAPrivateKey,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    token = token_for(signing_key, audience="different-client")
+
+    with caplog.at_level(logging.WARNING), pytest.raises(TokenVerificationError):
+        verifier_for(signing_key).verify(token)
+
+    assert "InvalidAudienceError" in caplog.text
+    assert token not in caplog.text
 
 
 def test_verifier_rejects_untrusted_signature(

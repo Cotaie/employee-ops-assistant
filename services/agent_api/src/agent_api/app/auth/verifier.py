@@ -1,3 +1,4 @@
+import logging
 from collections.abc import Iterable
 from typing import Any, Protocol
 
@@ -6,6 +7,10 @@ from jwt import PyJWK, PyJWKClient
 from jwt.exceptions import PyJWTError
 
 from agent_api.app.auth.models import AuthenticatedUser
+
+logger = logging.getLogger(__name__)
+
+GOOGLE_ISSUERS = ("https://accounts.google.com", "accounts.google.com")
 
 
 class TokenVerificationError(ValueError):
@@ -39,7 +44,7 @@ class OidcTokenVerifier:
             if jwks_url is None:
                 raise ValueError("jwks_url is required when no JWKS client is supplied")
             jwks_client = PyJWKClient(jwks_url, cache_keys=True)
-        self._issuer = issuer
+        self._issuer: str | tuple[str, ...] = GOOGLE_ISSUERS if issuer in GOOGLE_ISSUERS else issuer
         self._audience = audience
         self._jwks_client = jwks_client
 
@@ -58,6 +63,11 @@ class OidcTokenVerifier:
             if not isinstance(subject, str) or not subject:
                 raise TokenVerificationError("Token subject is invalid")
         except (PyJWTError, TokenVerificationError) as exc:
+            logger.warning(
+                "OIDC bearer token rejected (%s): %s",
+                type(exc).__name__,
+                exc,
+            )
             raise TokenVerificationError("Bearer token verification failed") from exc
 
         email = claims.get("email")
