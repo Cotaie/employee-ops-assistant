@@ -131,10 +131,32 @@ services:
       OAUTH2_PROXY_PASS_USER_HEADERS: "true"
       OAUTH2_PROXY_COOKIE_HTTPONLY: "true"
       OAUTH2_PROXY_COOKIE_SAMESITE: lax
+      OAUTH2_PROXY_COOKIE_REFRESH: 50m
+      OAUTH2_PROXY_REVERSE_PROXY: "true"
+      OAUTH2_PROXY_TRUSTED_PROXY_IPS: 172.16.0.0/12
       OAUTH2_PROXY_SKIP_PROVIDER_BUTTON: "true"
+    expose:
+      - "4180"
+
+  caddy:
+    image: caddy:2.11.4-alpine
+    container_name: employee-ops-caddy
+    restart: unless-stopped
+    depends_on:
+      - oauth2-proxy
+    environment:
+      APP_ADDRESS: ${APP_ADDRESS:-http://localhost}
     ports:
-      - "127.0.0.1:4180:4180"
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    volumes:
+      - ./caddy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
 
 volumes:
+  caddy-config:
+  caddy-data:
   chroma-data:
   postgres-data:

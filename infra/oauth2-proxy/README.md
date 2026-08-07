@@ -26,8 +26,11 @@ Set `OIDC_AUDIENCE` in `services/agent_api/.env` to the same Google client ID as
 
 ## Access
 
-For local testing, open `http://localhost:4180` directly. For EC2 smoke testing,
-tunnel local port `4180` to EC2 port `4180`, then open the same URL.
+For local testing through Caddy, register
+`http://localhost/oauth2/callback` with Google, use the same redirect URL in
+`.env`, and open `http://localhost`.
 
-For production, Caddy should proxy HTTPS traffic to `127.0.0.1:4180`. Use the
-HTTPS redirect URL and secure cookie settings documented in `.env.example`.
+For EC2, Caddy is the only browser-facing service. See
+[`../caddy/README.md`](../caddy/README.md) for domain and automatic HTTPS setup.
+OAuth2 Proxy port `4180` and Gradio port `7860` are available only inside the
+Compose network.
