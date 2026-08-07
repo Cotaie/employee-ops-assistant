@@ -38,10 +38,14 @@ class AgentApiClient:
         base_url: str,
         *,
         timeout: float = 300,
+        bearer_token: str | None = None,
         transport: httpx.AsyncBaseTransport | None = None,
     ) -> None:
         self._base_url = base_url.rstrip("/")
         self._timeout = timeout
+        self._headers = (
+            {"Authorization": f"Bearer {bearer_token}"} if bearer_token is not None else None
+        )
         self._transport = transport
 
     async def create_thread(self) -> str:
@@ -69,6 +73,7 @@ class AgentApiClient:
         async with httpx.AsyncClient(
             base_url=self._base_url,
             timeout=self._timeout,
+            headers=self._headers,
             transport=self._transport,
         ) as client:
             async with client.stream(
@@ -113,6 +118,7 @@ class AgentApiClient:
         async with httpx.AsyncClient(
             base_url=self._base_url,
             timeout=self._timeout,
+            headers=self._headers,
             transport=self._transport,
         ) as client:
             response = await client.post(path, json=json)

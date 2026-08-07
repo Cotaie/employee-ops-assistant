@@ -21,6 +21,9 @@ openssl rand -base64 32 | tr -- '+/' '-_'
 The `.env` file contains secrets and is ignored by Git. The `.env.example` file
 documents the required settings and is safe to commit.
 
+Set `OIDC_AUDIENCE` in `services/agent_api/.env` to the same Google client ID as
+`OAUTH2_PROXY_CLIENT_ID`. Agent API uses it when validating forwarded ID tokens.
+
 ## Access
 
 For local testing, open `http://localhost:4180` directly. For EC2 smoke testing,

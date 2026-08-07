@@ -30,6 +30,15 @@ class Settings(BaseSettings):
         default="http://localhost:11434",
         alias="OLLAMA_BASE_URL",
     )
+    oidc_issuer: str = Field(
+        default="https://accounts.google.com",
+        alias="OIDC_ISSUER",
+    )
+    oidc_audience: str | None = Field(default=None, alias="OIDC_AUDIENCE")
+    oidc_jwks_url: str = Field(
+        default="https://www.googleapis.com/oauth2/v3/certs",
+        alias="OIDC_JWKS_URL",
+    )
 
 
 @lru_cache

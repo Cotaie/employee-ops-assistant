@@ -53,10 +53,22 @@ class UiResult(NamedTuple):
     status: str
 
 
-agent_api_client = AgentApiClient(
-    os.getenv("AGENT_API_URL", "http://127.0.0.1:8000"),
-    timeout=float(os.getenv("AGENT_API_TIMEOUT_SECONDS", "300")),
-)
+AGENT_API_URL = os.getenv("AGENT_API_URL", "http://127.0.0.1:8000")
+AGENT_API_TIMEOUT_SECONDS = float(os.getenv("AGENT_API_TIMEOUT_SECONDS", "300"))
+
+
+def _authenticated_agent_api_client(request: gr.Request) -> AgentApiClient:
+    authorization = request.headers.get("authorization")
+    if authorization is None:
+        raise gr.Error("Authenticated session token is unavailable.")
+    scheme, separator, token = authorization.partition(" ")
+    if separator != " " or scheme.lower() != "bearer" or not token:
+        raise gr.Error("Authenticated session token is invalid.")
+    return AgentApiClient(
+        AGENT_API_URL,
+        timeout=AGENT_API_TIMEOUT_SECONDS,
+        bearer_token=token,
+    )
 
 
 def _update(
@@ -327,8 +339,10 @@ async def send_message(
     message: str,
     history: ChatHistory | None,
     thread_id: str | None,
+    request: gr.Request,
 ) -> AsyncIterator[UiResult]:
-    async for result in _send_message(message, history, thread_id, agent_api_client):
+    client = _authenticated_agent_api_client(request)
+    async for result in _send_message(message, history, thread_id, client):
         yield result
 
 
@@ -336,12 +350,14 @@ async def retry_message(
     history: ChatHistory | None,
     thread_id: str | None,
     pending_message: PendingMessage | None,
+    request: gr.Request,
 ) -> AsyncIterator[UiResult]:
+    client = _authenticated_agent_api_client(request)
     async for result in _retry_message(
         history,
         thread_id,
         pending_message,
-        agent_api_client,
+        client,
     ):
         yield result
 
@@ -350,13 +366,15 @@ async def approve_tool(
     history: ChatHistory | None,
     thread_id: str | None,
     pending_approval: PendingApproval | None,
+    request: gr.Request,
 ) -> UiResult:
+    client = _authenticated_agent_api_client(request)
     return await _resolve_approval(
         approved=True,
         history=history,
         thread_id=thread_id,
         pending_approval=pending_approval,
-        client=agent_api_client,
+        client=client,
     )
 
 
@@ -364,13 +382,15 @@ async def reject_tool(
     history: ChatHistory | None,
     thread_id: str | None,
     pending_approval: PendingApproval | None,
+    request: gr.Request,
 ) -> UiResult:
+    client = _authenticated_agent_api_client(request)
     return await _resolve_approval(
         approved=False,
         history=history,
         thread_id=thread_id,
         pending_approval=pending_approval,
-        client=agent_api_client,
+        client=client,
     )
 
 

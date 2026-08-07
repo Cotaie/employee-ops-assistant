@@ -13,6 +13,7 @@ from langgraph.types import Command, GraphOutput, Interrupt
 from starlette.responses import StreamingResponse
 
 from agent_api.app.dependencies.agent import ThreadGraphContext, get_thread_graph_context
+from agent_api.app.dependencies.auth import CurrentUserDependency
 
 router = APIRouter(prefix="/threads", tags=["chat"])
 ThreadContextDependency = Annotated[ThreadGraphContext, Depends(get_thread_graph_context)]
@@ -149,6 +150,7 @@ async def _stream_graph(
 async def send_message(
     thread_id: str,
     request: ChatRequest,
+    current_user: CurrentUserDependency,
     context: ThreadContextDependency,
 ) -> dict[str, object]:
     if context.pending_interrupts:
@@ -179,6 +181,7 @@ async def send_message(
 async def stream_message(
     thread_id: str,
     chat_request: ChatRequest,
+    current_user: CurrentUserDependency,
     context: ThreadContextDependency,
     request: Request,
 ) -> StreamingResponse:
@@ -218,6 +221,7 @@ async def stream_message(
 async def approve_tool(
     thread_id: str,
     request: ApprovalRequest,
+    current_user: CurrentUserDependency,
     context: ThreadContextDependency,
 ) -> dict[str, object]:
     pending = context.pending_interrupts

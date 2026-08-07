@@ -26,6 +26,7 @@ async def test_agent_api_client_uses_thread_message_and_approval_endpoints() -> 
 
     client = AgentApiClient(
         "http://agent-api",
+        bearer_token="verified-id-token",
         transport=httpx.MockTransport(handler),
     )
 
@@ -40,6 +41,9 @@ async def test_agent_api_client_uses_thread_message_and_approval_endpoints() -> 
         "/threads/thread-1/messages",
         "/threads/thread-1/approval",
     ]
+    assert all(
+        request.headers["authorization"] == "Bearer verified-id-token" for request in requests
+    )
     assert json.loads(requests[1].content) == {
         "message_id": "message-1",
         "message": "hello",

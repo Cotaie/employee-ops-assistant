@@ -17,8 +17,10 @@ from pydantic import SecretStr
 
 from agent_api.app import main
 from agent_api.app.api.routes.chat import _stream_graph
+from agent_api.app.auth.models import AuthenticatedUser
 from agent_api.app.core.config import Settings, get_settings
 from agent_api.app.dependencies.agent import ThreadGraphContext
+from agent_api.app.dependencies.auth import get_authenticated_user
 from agent_api.app.main import create_app
 
 MESSAGE_ID = "c159099f-62d1-4e70-83a4-4b82f6a237f9"
@@ -192,8 +194,21 @@ def fake_agent(monkeypatch: pytest.MonkeyPatch) -> FakeAgent:
 
 
 @asynccontextmanager
-async def build_test_client() -> AsyncIterator[httpx.AsyncClient]:
+async def build_test_client(
+    *,
+    authenticated: bool = True,
+) -> AsyncIterator[httpx.AsyncClient]:
     app = create_app()
+    if authenticated:
+
+        async def authenticated_user() -> AuthenticatedUser:
+            return AuthenticatedUser(
+                subject="google-user-123",
+                email="employee@example.com",
+                email_verified=True,
+            )
+
+        app.dependency_overrides[get_authenticated_user] = authenticated_user
     transport = httpx.ASGITransport(app=app)
     async with app.router.lifespan_context(app):
         async with httpx.AsyncClient(transport=transport, base_url="http://testserver") as client:
@@ -248,6 +263,30 @@ async def test_create_thread_returns_unique_uuid() -> None:
     assert UUID(first_thread_id).version == 4
     assert UUID(second_thread_id).version == 4
     assert first_thread_id != second_thread_id
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize(
+    ("path", "payload"),
+    [
+        ("/threads", None),
+        ("/threads/thread-1/messages", chat_payload("hello")),
+        ("/threads/thread-1/messages/stream", chat_payload("hello")),
+        (
+            "/threads/thread-1/approval",
+            {"interrupt_id": "interrupt-1", "approved": True},
+        ),
+    ],
+)
+async def test_thread_endpoints_reject_unauthenticated_callers(
+    path: str,
+    payload: dict[str, object] | None,
+) -> None:
+    async with build_test_client(authenticated=False) as client:
+        response = await client.post(path, json=payload)
+
+    assert response.status_code == 401
+    assert response.headers["www-authenticate"] == "Bearer"
 
 
 @pytest.mark.anyio
