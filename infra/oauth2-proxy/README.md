@@ -11,7 +11,9 @@ From the repository root, create the private environment file:
 cp infra/oauth2-proxy/.env.example infra/oauth2-proxy/.env
 ```
 
-Register the matching callback URL in the Google OAuth client and replace the
+Open the project-specific
+[Google Auth Platform client page](https://console.cloud.google.com/auth/clients?project=employee-ops-assistant),
+register the matching callback URL in the Google OAuth client, and replace the
 placeholder values in `.env`. Generate the cookie secret with:
 
 ```bash
