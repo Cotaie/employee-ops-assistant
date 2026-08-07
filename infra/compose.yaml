@@ -97,6 +97,8 @@ services:
       SERVICE_VERSION: docker
       OLLAMA_BASE_URL: http://host.docker.internal:11434
       DATABASE_URL: postgresql://agent:agent@postgres:5432/agent_checkpoints
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     ports:
       - "8003:8000"
 
