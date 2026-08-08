@@ -3,8 +3,10 @@
 This package defines the AWS infrastructure for Employee Ops Assistant using
 AWS CDK and TypeScript.
 
-The initial stack is intentionally empty. It can be synthesized locally, but it
-does not create or modify AWS resources.
+The stack looks up the existing default VPC in the target account and Region.
+This is a read-only context lookup: it does not create, modify, or import the
+VPC into CloudFormation. Later infrastructure resources can use the resulting
+VPC reference.
 
 ## Target environment
 
@@ -27,8 +29,10 @@ cd infra/cdk
 nvm use
 npm install
 npm run build
-npm run synth
+AWS_PROFILE=employee-ops npm run synth
 ```
 
 `synth` generates a CloudFormation template under `cdk.out/`. It does not deploy
-the template to AWS.
+the template to AWS. The first synthesis queries AWS for the default VPC and
+caches the non-secret lookup result in `cdk.context.json` for deterministic
+future synthesis.
