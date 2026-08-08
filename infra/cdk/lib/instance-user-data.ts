@@ -90,8 +90,8 @@ export function createInstanceUserData(props: InstanceUserDataProps): UserData {
     "  sleep 2",
     "done",
     "curl -fsS http://127.0.0.1:11434/api/tags >/dev/null",
-    "ollama pull qwen3:1.7b",
-    "ollama pull nomic-embed-text:v1.5",
+    "curl -fsS -H 'Content-Type: application/json' http://127.0.0.1:11434/api/pull -d '{\"model\":\"qwen3:1.7b\",\"stream\":false}' >/dev/null",
+    "curl -fsS -H 'Content-Type: application/json' http://127.0.0.1:11434/api/pull -d '{\"model\":\"nomic-embed-text:v1.5\",\"stream\":false}' >/dev/null",
     "install -d -o ubuntu -g ubuntu /home/ubuntu/apps",
     `if [ ! -d ${APPLICATION_DIRECTORY}/.git ]; then`,
     `  runuser -u ubuntu -- git clone ${REPOSITORY_URL} ${APPLICATION_DIRECTORY}`,
@@ -130,7 +130,7 @@ export function createInstanceUserData(props: InstanceUserDataProps): UserData {
     `runuser -u ubuntu -- docker compose -f ${APPLICATION_DIRECTORY}/infra/compose.yaml up -d --build`,
     "docker --version",
     "docker compose version",
-    "ollama list",
+    "curl -fsS http://127.0.0.1:11434/api/tags >/dev/null",
   );
 
   return userData;
