@@ -30,5 +30,6 @@
         ]
       }
     ]
-  }
+  },
+  "ssm:account=634432338572:parameterName=/aws/service/canonical/ubuntu/server/26.04/stable/current/amd64/hvm/ebs-gp3/ami-id:region=eu-central-1": "ami-0f60f7b735e5e576c"
 }

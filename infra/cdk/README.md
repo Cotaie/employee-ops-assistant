@@ -15,6 +15,9 @@ The non-secret deployment target is configured in `cdk.json`:
 ```text
 AWS account: 634432338572
 AWS region:  eu-central-1
+Instance:    t2.medium
+Root volume: 42 GiB
+SSH key:     employee-ops-key
 SSH source:  213.157.184.108/32
 ```
 
@@ -32,21 +35,37 @@ with the following inbound access:
 - TCP 443 from any IPv4 address for HTTPS.
 - TCP 22 only from the configured `sshAllowedCidr` for administration.
 
-All outbound traffic is allowed so the future EC2 instance can download system
-packages, container images, models, and certificates. The security group is not
-created in AWS until the stack is deployed.
+All outbound traffic is allowed so the EC2 instance can download system
+packages, container images, models, and certificates.
 
 ## EC2 instance role
 
-The synthesized stack defines a runtime IAM role trusted only by the EC2
-service. It initially attaches the AWS-managed
-`AmazonSSMManagedInstanceCore` policy so the future instance can register with
+The stack defines a runtime IAM role trusted only by the EC2 service. It
+attaches the AWS-managed
+`AmazonSSMManagedInstanceCore` policy so the instance can register with
 Systems Manager and support Session Manager access.
 
 The role does not grant administrator, Secrets Manager, S3, or CloudWatch
 permissions. Those permissions can be added later with resource-level scope
-when their concrete resources are defined. The role is not created or attached
-to an instance until the stack is deployed.
+when their concrete resources are defined.
+
+## EC2 instance
+
+The synthesized stack adds an `employee-ops-assistant` instance with:
+
+- Ubuntu Server 26.04 LTS AMD64, resolved from Canonical's public SSM parameter
+  and pinned in `cdk.context.json`.
+- `t2.medium` compute capacity.
+- A 42 GiB encrypted gp3 root volume that is deleted with the instance.
+- Placement in an existing public subnet with an automatically assigned public
+  IPv4 address.
+- The existing `employee-ops-key` SSH key pair.
+- The CDK-managed security group and EC2 runtime role.
+- IMDSv2 required for instance metadata credentials.
+
+This instance will be additional to the existing manually managed instance and
+will incur EC2 and EBS charges if deployed. User data, application deployment,
+and Elastic IP cutover are intentionally deferred to later changes.
 
 ## Local validation
 

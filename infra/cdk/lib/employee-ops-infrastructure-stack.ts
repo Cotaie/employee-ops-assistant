@@ -1,9 +1,18 @@
 import { Stack, type StackProps } from "aws-cdk-lib";
 import {
+  BlockDeviceVolume,
+  EbsDeviceVolumeType,
+  Instance,
+  InstanceType,
+  KeyPair,
+  MachineImage,
+  OperatingSystemType,
   Peer,
   Port,
   SecurityGroup,
+  SubnetType,
   Vpc,
+  type IInstance,
   type ISecurityGroup,
   type IVpc,
 } from "aws-cdk-lib/aws-ec2";
@@ -15,11 +24,18 @@ import {
 } from "aws-cdk-lib/aws-iam";
 import type { Construct } from "constructs";
 
+const UBUNTU_2604_AMI_PARAMETER =
+  "/aws/service/canonical/ubuntu/server/26.04/stable/current/amd64/hvm/ebs-gp3/ami-id";
+
 export interface EmployeeOpsInfrastructureStackProps extends StackProps {
+  readonly instanceType: string;
+  readonly keyPairName: string;
+  readonly rootVolumeSizeGiB: number;
   readonly sshAllowedCidr: string;
 }
 
 export class EmployeeOpsInfrastructureStack extends Stack {
+  public readonly instance: IInstance;
   public readonly instanceRole: IRole;
   public readonly instanceSecurityGroup: ISecurityGroup;
   public readonly vpc: IVpc;
@@ -70,5 +86,44 @@ export class EmployeeOpsInfrastructureStack extends Stack {
       Port.tcp(22),
       "Allow SSH from the configured administrator address",
     );
+
+    const keyPair = KeyPair.fromKeyPairName(
+      this,
+      "InstanceKeyPair",
+      props.keyPairName,
+    );
+    const machineImage = MachineImage.fromSsmParameter(
+      UBUNTU_2604_AMI_PARAMETER,
+      {
+        cachedInContext: true,
+        os: OperatingSystemType.LINUX,
+      },
+    );
+
+    this.instance = new Instance(this, "Instance", {
+      associatePublicIpAddress: true,
+      blockDevices: [
+        {
+          deviceName: "/dev/sda1",
+          volume: BlockDeviceVolume.ebs(props.rootVolumeSizeGiB, {
+            deleteOnTermination: true,
+            encrypted: true,
+            volumeType: EbsDeviceVolumeType.GP3,
+          }),
+        },
+      ],
+      instanceName: "employee-ops-assistant",
+      instanceType: new InstanceType(props.instanceType),
+      keyPair,
+      machineImage,
+      propagateTagsToVolumeOnCreation: true,
+      requireImdsv2: true,
+      role: this.instanceRole,
+      securityGroup: this.instanceSecurityGroup,
+      vpc: this.vpc,
+      vpcSubnets: {
+        subnetType: SubnetType.PUBLIC,
+      },
+    });
   }
 }

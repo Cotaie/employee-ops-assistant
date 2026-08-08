@@ -1,6 +1,9 @@
 {
   "app": "npx ts-node --prefer-ts-exts bin/employee-ops-assistant.ts",
   "context": {
+    "instanceType": "t2.medium",
+    "keyPairName": "employee-ops-key",
+    "rootVolumeSizeGiB": 42,
     "sshAllowedCidr": "213.157.184.108/32",
     "targetAccount": "634432338572",
     "targetRegion": "eu-central-1"
