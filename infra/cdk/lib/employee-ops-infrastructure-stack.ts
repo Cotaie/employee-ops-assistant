@@ -22,16 +22,21 @@ import {
   ServicePrincipal,
   type IRole,
 } from "aws-cdk-lib/aws-iam";
+import { Secret } from "aws-cdk-lib/aws-secretsmanager";
 import type { Construct } from "constructs";
 
+import type { ApplicationConfig } from "./application-config";
 import { createInstanceUserData } from "./instance-user-data";
 
 const UBUNTU_2604_AMI_PARAMETER =
   "/aws/service/canonical/ubuntu/server/26.04/stable/current/amd64/hvm/ebs-gp3/ami-id";
 
 export interface EmployeeOpsInfrastructureStackProps extends StackProps {
+  readonly agentApiSecretName: string;
+  readonly applicationConfig: ApplicationConfig;
   readonly instanceType: string;
   readonly keyPairName: string;
+  readonly oauth2ProxySecretName: string;
   readonly rootVolumeSizeGiB: number;
   readonly sshAllowedCidr: string;
 }
@@ -62,6 +67,20 @@ export class EmployeeOpsInfrastructureStack extends Stack {
         ),
       ],
     });
+
+    const agentApiSecret = Secret.fromSecretNameV2(
+      this,
+      "AgentApiSecret",
+      props.agentApiSecretName,
+    );
+    const oauth2ProxySecret = Secret.fromSecretNameV2(
+      this,
+      "OAuth2ProxySecret",
+      props.oauth2ProxySecretName,
+    );
+
+    agentApiSecret.grantRead(this.instanceRole);
+    oauth2ProxySecret.grantRead(this.instanceRole);
 
     this.instanceSecurityGroup = new SecurityGroup(
       this,
@@ -101,7 +120,12 @@ export class EmployeeOpsInfrastructureStack extends Stack {
         os: OperatingSystemType.LINUX,
       },
     );
-    const userData = createInstanceUserData();
+    const userData = createInstanceUserData({
+      agentApiSecretName: props.agentApiSecretName,
+      applicationConfig: props.applicationConfig,
+      awsRegion: this.region,
+      oauth2ProxySecretName: props.oauth2ProxySecretName,
+    });
 
     this.instance = new Instance(this, "Instance", {
       associatePublicIpAddress: true,

@@ -45,9 +45,9 @@ attaches the AWS-managed
 `AmazonSSMManagedInstanceCore` policy so the instance can register with
 Systems Manager and support Session Manager access.
 
-The role does not grant administrator, Secrets Manager, S3, or CloudWatch
-permissions. Those permissions can be added later with resource-level scope
-when their concrete resources are defined.
+The role can read only the existing `employee-ops/agent-api` and
+`employee-ops/oauth2-proxy` Secrets Manager secrets. It does not grant
+administrator, general Secrets Manager, S3, or CloudWatch permissions.
 
 ## EC2 instance
 
@@ -79,10 +79,32 @@ On its first boot, cloud-init runs a non-interactive setup script that:
   enables its systemd service, and downloads `qwen3:1.7b`.
 - Clones the public repository to
   `/home/ubuntu/apps/employee-ops-assistant` as the `ubuntu` user.
+- Retrieves the two application secrets with the EC2 role, validates their
+  expected JSON fields, and creates private Agent API and OAuth2 Proxy `.env`
+  files.
+- Creates `infra/.env` from the non-secret Caddy configuration and validates
+  the complete Compose configuration.
 
-The bootstrap intentionally does not create `.env` files, download the
-embeddings model, build application images, or start Docker Compose. First-boot
-output is available on EC2 in `/var/log/cloud-init-output.log`.
+Secret retrieval runs with shell command tracing disabled, and generated
+environment files are readable only by the `ubuntu` user. The bootstrap still
+does not download the embeddings model, build application images, or start
+Docker Compose. First-boot output is available on EC2 in
+`/var/log/cloud-init-output.log`.
+
+## Application configuration
+
+Non-sensitive, deployment-specific values are grouped by service under
+`applicationConfig` in `cdk.json`. Replace all placeholder Jira and Google
+values before deployment.
+
+The Agent API secret must contain `JIRA_API_TOKEN` and `GITHUB_API_TOKEN`. The
+OAuth2 Proxy secret must contain `OAUTH2_PROXY_CLIENT_SECRET` and
+`OAUTH2_PROXY_COOKIE_SECRET`. At first boot, user data combines those fields
+with `applicationConfig` to generate:
+
+- `services/agent_api/.env`
+- `infra/oauth2-proxy/.env`
+- `infra/.env`
 
 ## Local validation
 
