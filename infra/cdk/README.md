@@ -15,12 +15,26 @@ The non-secret deployment target is configured in `cdk.json`:
 ```text
 AWS account: 634432338572
 AWS region:  eu-central-1
+SSH source:  213.157.184.108/32
 ```
 
-The application entry point validates both context values and passes them to
-the stack through its `env` property. This makes synthesized templates specific
-to the intended AWS environment. It does not authenticate with or deploy to the
+The application entry point validates these context values and passes them to
+the stack. Update `sshAllowedCidr` if the administrator's public IP address
+changes. This configuration does not authenticate with or deploy to the
 account.
+
+## Instance security group
+
+The synthesized stack defines a security group in the existing default VPC
+with the following inbound access:
+
+- TCP 80 from any IPv4 address for HTTP.
+- TCP 443 from any IPv4 address for HTTPS.
+- TCP 22 only from the configured `sshAllowedCidr` for administration.
+
+All outbound traffic is allowed so the future EC2 instance can download system
+packages, container images, models, and certificates. The security group is not
+created in AWS until the stack is deployed.
 
 ## Local validation
 
