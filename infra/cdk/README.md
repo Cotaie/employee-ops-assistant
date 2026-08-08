@@ -36,6 +36,18 @@ All outbound traffic is allowed so the future EC2 instance can download system
 packages, container images, models, and certificates. The security group is not
 created in AWS until the stack is deployed.
 
+## EC2 instance role
+
+The synthesized stack defines a runtime IAM role trusted only by the EC2
+service. It initially attaches the AWS-managed
+`AmazonSSMManagedInstanceCore` policy so the future instance can register with
+Systems Manager and support Session Manager access.
+
+The role does not grant administrator, Secrets Manager, S3, or CloudWatch
+permissions. Those permissions can be added later with resource-level scope
+when their concrete resources are defined. The role is not created or attached
+to an instance until the stack is deployed.
+
 ## Local validation
 
 ```bash

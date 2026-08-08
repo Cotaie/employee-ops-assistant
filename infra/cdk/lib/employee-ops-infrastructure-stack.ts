@@ -7,6 +7,12 @@ import {
   type ISecurityGroup,
   type IVpc,
 } from "aws-cdk-lib/aws-ec2";
+import {
+  ManagedPolicy,
+  Role,
+  ServicePrincipal,
+  type IRole,
+} from "aws-cdk-lib/aws-iam";
 import type { Construct } from "constructs";
 
 export interface EmployeeOpsInfrastructureStackProps extends StackProps {
@@ -14,6 +20,7 @@ export interface EmployeeOpsInfrastructureStackProps extends StackProps {
 }
 
 export class EmployeeOpsInfrastructureStack extends Stack {
+  public readonly instanceRole: IRole;
   public readonly instanceSecurityGroup: ISecurityGroup;
   public readonly vpc: IVpc;
 
@@ -26,6 +33,16 @@ export class EmployeeOpsInfrastructureStack extends Stack {
 
     this.vpc = Vpc.fromLookup(this, "DefaultVpc", {
       isDefault: true,
+    });
+
+    this.instanceRole = new Role(this, "InstanceRole", {
+      assumedBy: new ServicePrincipal("ec2.amazonaws.com"),
+      description: "Runtime AWS permissions for Employee Ops Assistant EC2",
+      managedPolicies: [
+        ManagedPolicy.fromAwsManagedPolicyName(
+          "AmazonSSMManagedInstanceCore",
+        ),
+      ],
     });
 
     this.instanceSecurityGroup = new SecurityGroup(
