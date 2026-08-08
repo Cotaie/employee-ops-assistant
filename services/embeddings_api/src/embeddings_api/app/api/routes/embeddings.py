@@ -18,4 +18,4 @@ async def create_embeddings(
     request: EmbeddingsRequest,
     service: EmbeddingsServiceDependency,
 ) -> EmbeddingsResponse:
-    return service.generate_embeddings(request.inputs)
+    return await service.generate_embeddings(request.inputs)

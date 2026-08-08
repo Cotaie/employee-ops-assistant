@@ -1,37 +1,66 @@
-from pathlib import Path
+import json
 
+import httpx
+import pytest
 from contracts import EmbeddingsResponse
 
 from embeddings_api.app.services.embeddings import EmbeddingsService
 
 
-class FakeVector:
-    def __init__(self, values: list[float]) -> None:
-        self._values = values
+@pytest.mark.anyio
+async def test_embeddings_service_calls_ollama_with_batched_inputs() -> None:
+    def handle_request(request: httpx.Request) -> httpx.Response:
+        assert request.url.path == "/api/embed"
+        assert json.loads(request.content) == {
+            "model": "nomic-embed-text:v1.5",
+            "input": ["a", "bb"],
+        }
+        return httpx.Response(
+            200,
+            json={
+                "model": "nomic-embed-text:v1.5",
+                "embeddings": [[0.0, 1.0], [1.0, 2.0]],
+            },
+        )
 
-    def tolist(self) -> list[float]:
-        return self._values
-
-
-class FakeModel:
-    def get_embedding_dimension(self) -> int:
-        return 2
-
-    def encode(self, inputs: list[str]) -> list[FakeVector]:
-        return [FakeVector([float(index), float(len(text))]) for index, text in enumerate(inputs)]
-
-
-def test_embeddings_service_preserves_provider_metadata() -> None:
-    service = EmbeddingsService(
-        model_name="test-model",
-        model_path=Path("."),
-        model=FakeModel(),
-    )
-
-    response = service.generate_embeddings(["a", "bb"])
+    transport = httpx.MockTransport(handle_request)
+    async with httpx.AsyncClient(
+        base_url="http://ollama:11434",
+        transport=transport,
+    ) as client:
+        service = EmbeddingsService(
+            model_name="nomic-embed-text:v1.5",
+            client=client,
+        )
+        response = await service.generate_embeddings(["a", "bb"])
 
     assert response == EmbeddingsResponse(
         embeddings=[[0.0, 1.0], [1.0, 2.0]],
-        model="test-model",
+        model="nomic-embed-text:v1.5",
         dimensions=2,
     )
+
+
+@pytest.mark.anyio
+async def test_embeddings_service_rejects_inconsistent_vector_dimensions() -> None:
+    transport = httpx.MockTransport(
+        lambda _: httpx.Response(
+            200,
+            json={
+                "model": "nomic-embed-text:v1.5",
+                "embeddings": [[0.0, 1.0], [1.0]],
+            },
+        ),
+    )
+
+    async with httpx.AsyncClient(
+        base_url="http://ollama:11434",
+        transport=transport,
+    ) as client:
+        service = EmbeddingsService(
+            model_name="nomic-embed-text:v1.5",
+            client=client,
+        )
+
+        with pytest.raises(ValueError, match="same dimension"):
+            await service.generate_embeddings(["a", "bb"])

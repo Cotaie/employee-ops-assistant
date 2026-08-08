@@ -13,7 +13,7 @@ class FakeEmbeddingsService:
     model_name = "test-model"
     dimensions = 3
 
-    def generate_embeddings(self, inputs: list[str]) -> EmbeddingsResponse:
+    async def generate_embeddings(self, inputs: list[str]) -> EmbeddingsResponse:
         return EmbeddingsResponse(
             embeddings=[[float(index), 0.0, 1.0] for index, _ in enumerate(inputs)],
             model=self.model_name,

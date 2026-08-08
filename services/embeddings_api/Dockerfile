@@ -5,15 +5,14 @@ ENV PYTHONUNBUFFERED=1
 
 WORKDIR /app
 
-COPY libs/contracts /app/libs/contracts
-COPY services/embeddings_api /app/services/embeddings_api
+COPY pyproject.toml uv.lock /app/
+COPY libs /app/libs
+COPY services /app/services
 
-WORKDIR /app/services/embeddings_api
+RUN uv sync --frozen --no-dev --package embeddings-api
 
-RUN uv sync --no-dev
-
-ENV PATH="/app/services/embeddings_api/.venv/bin:${PATH}"
-ENV PYTHONPATH="/app/libs/contracts/src:/app/services/embeddings_api/src"
+ENV PATH="/app/.venv/bin:${PATH}"
+ENV PYTHONPATH="/app/services/embeddings_api/src"
 
 EXPOSE 8000
 

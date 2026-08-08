@@ -64,8 +64,8 @@ The synthesized stack adds an `employee-ops-assistant` instance with:
 - IMDSv2 required for instance metadata credentials.
 
 This instance will be additional to the existing manually managed instance and
-will incur EC2 and EBS charges if deployed. Application configuration, Compose
-startup, and Elastic IP cutover are intentionally deferred to later changes.
+will incur EC2 and EBS charges if deployed. Elastic IP cutover remains a
+separate, explicit migration step.
 
 ## First-boot user data
 
@@ -76,20 +76,20 @@ On its first boot, cloud-init runs a non-interactive setup script that:
 - Installs Docker Engine, Buildx, and the Compose plugin from Docker's official
   Ubuntu repository, adds `ubuntu` to the `docker` group, and enables Docker.
 - Installs Ollama, binds it to `0.0.0.0:11434` for host-to-container access,
-  enables its systemd service, and downloads `qwen3:1.7b`.
+  enables its systemd service, and downloads `qwen3:1.7b` and
+  `nomic-embed-text:v1.5`.
 - Clones the public repository to
   `/home/ubuntu/apps/employee-ops-assistant` as the `ubuntu` user.
 - Retrieves the two application secrets with the EC2 role, validates their
   expected JSON fields, and creates private Agent API and OAuth2 Proxy `.env`
   files.
-- Creates `infra/.env` from the non-secret Caddy configuration and validates
-  the complete Compose configuration.
+- Creates `infra/.env` from the non-secret Caddy configuration, validates the
+  complete Compose configuration, builds the application images, and starts
+  the stack.
 
 Secret retrieval runs with shell command tracing disabled, and generated
-environment files are readable only by the `ubuntu` user. The bootstrap still
-does not download the embeddings model, build application images, or start
-Docker Compose. First-boot output is available on EC2 in
-`/var/log/cloud-init-output.log`.
+environment files are readable only by the `ubuntu` user. First-boot output is
+available on EC2 in `/var/log/cloud-init-output.log`.
 
 ## Application configuration
 

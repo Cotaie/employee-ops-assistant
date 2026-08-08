@@ -3,12 +3,12 @@
 ## 1. Purpose
 
 `EmbeddingsApi` generates vector embeddings for text inputs used by retrieval flows.
-It is a small FastAPI service that loads a local SentenceTransformer model and exposes:
+It is a small FastAPI service backed by an Ollama embedding model and exposes:
 
 - `GET /health`
 - `POST /embeddings`
 
-The service is intentionally stateless except for the loaded model instance kept in application state.
+The service is stateless and keeps a shared asynchronous Ollama HTTP client in application state.
 
 ## 2. Architecture
 
@@ -24,7 +24,8 @@ During startup, the app stores two objects on `app.state`:
 - `settings`
 - `embeddings_service`
 
-This keeps configuration and the loaded model available to request handlers without reloading them per request.
+This keeps configuration and the Ollama-backed service available to request handlers without
+creating a new HTTP client per request.
 
 ### 2.3 Shared Contracts
 
@@ -52,8 +53,8 @@ Using shared contracts keeps the API schema consistent across services and tests
 1. Client calls `POST /embeddings` with one or more text inputs.
 2. FastAPI validates the payload with `EmbeddingsRequest`.
 3. The route handler resolves `EmbeddingsService` from application state.
-4. The service calls the loaded SentenceTransformer model.
-5. The returned vectors are serialized into `EmbeddingsResponse`.
+4. The service sends the complete input batch to Ollama's `POST /api/embed` endpoint.
+5. The returned vectors are validated and serialized into `EmbeddingsResponse`.
 6. The vectors are returned in the same order as the inputs.
 
 ## 4. Configuration
@@ -65,30 +66,30 @@ Current settings:
 - `SERVICE_NAME`
 - `SERVICE_VERSION`
 - `MODEL_NAME`
-- `MODEL_PATH`
+- `OLLAMA_BASE_URL`
+- `OLLAMA_TIMEOUT_SECONDS`
 
 Behavior:
 
 - `SERVICE_VERSION` is normalized so an empty string becomes `null`
-- relative `MODEL_PATH` values are resolved against the service project directory
 - `.env` is loaded from `services/embeddings_api/.env`
 
-The checked-in `.env` file points to the local model under `.local/models/bge-small`.
+Copy `.env.example` to `.env` when running the service directly outside Docker.
 
 ## 5. Embedding Service
 
 `EmbeddingsService` is responsible for:
 
-- loading the SentenceTransformer model
-- reading the embedding dimension once during startup
-- generating vectors for batches of input text
+- requesting vectors for batches of input text from Ollama
+- preserving the model identifier returned by Ollama
+- validating vector count and dimensions before returning the shared contract
 
 Implementation details:
 
-- the model is loaded from `MODEL_PATH`
-- the model dimension is read from `get_embedding_dimension()`
-- `encode()` is used to generate vectors
-- vectors are converted to plain lists before returning them in the response
+- one `/api/embed` request contains the complete input list
+- the vector dimension is derived from the Ollama response
+- every returned vector must have the same non-zero dimension
+- the number of vectors must match the number of inputs
 
 ## 6. API Contracts
 
@@ -127,8 +128,8 @@ Validation rules:
 
 Validation failures are handled by FastAPI and returned as `422` responses.
 
-Startup failures are surfaced immediately if the configured model path cannot be loaded.
-This is intentional because the service is meant to be backed by a concrete local embedding model.
+Ollama connection and HTTP failures are surfaced when an embedding request is processed. Invalid
+or inconsistent Ollama responses fail rather than returning corrupt vector metadata.
 
 ## 8. Test Strategy
 
@@ -148,7 +149,9 @@ The tests verify:
 
 ## 9. Operational Notes
 
-- The service expects a local model artifact to exist at `MODEL_PATH`.
+- Ollama must be reachable at `OLLAMA_BASE_URL` and the configured `MODEL_NAME` must be pulled.
+- Changing the embedding model or dimension requires clearing affected Chroma collections and
+  re-ingesting documents.
 - The local test environment may need `UV_CACHE_DIR=/tmp/uv-cache` to avoid the sandbox cache restriction.
 - Run tests from `services/embeddings_api` with:
 

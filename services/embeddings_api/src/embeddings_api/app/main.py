@@ -1,6 +1,7 @@
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 
+import httpx
 from fastapi import FastAPI
 
 from embeddings_api.app.api.routes import register_routes
@@ -15,12 +16,19 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 
     settings = app.state.settings
 
-    if not hasattr(app.state, "embeddings_service"):
+    if hasattr(app.state, "embeddings_service"):
+        yield
+        return
+
+    async with httpx.AsyncClient(
+        base_url=settings.ollama_base_url,
+        timeout=settings.ollama_timeout_seconds,
+    ) as client:
         app.state.embeddings_service = EmbeddingsService(
             model_name=settings.model_name,
-            model_path=settings.model_path,
+            client=client,
         )
-    yield
+        yield
 
 
 def create_app() -> FastAPI:

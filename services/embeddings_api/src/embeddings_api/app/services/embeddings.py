@@ -1,17 +1,11 @@
-from pathlib import Path
-from typing import Protocol, cast
-
+import httpx
 from contracts import EmbeddingsResponse
+from pydantic import BaseModel
 
 
-class EmbeddingVector(Protocol):
-    def tolist(self) -> list[float]: ...
-
-
-class EmbeddingModel(Protocol):
-    def get_embedding_dimension(self) -> int | None: ...
-
-    def encode(self, inputs: list[str]) -> list[EmbeddingVector]: ...
+class OllamaEmbeddingsResponse(BaseModel):
+    model: str
+    embeddings: list[list[float]]
 
 
 class EmbeddingsService:
@@ -20,34 +14,34 @@ class EmbeddingsService:
     def __init__(
         self,
         model_name: str,
-        model_path: Path,
-        model: EmbeddingModel | None = None,
+        client: httpx.AsyncClient,
     ) -> None:
         self._model_name = model_name
-        self._model = model or self._load_model(model_path)
-        dimensions = self._model.get_embedding_dimension()
-        if dimensions is None:
-            raise ValueError("The embedding model did not report its vector size.")
-        self._dimensions = dimensions
-
-    @staticmethod
-    def _load_model(model_path: Path) -> EmbeddingModel:
-        from sentence_transformers import SentenceTransformer
-
-        return cast(EmbeddingModel, SentenceTransformer(str(model_path)))
+        self._client = client
 
     @property
     def model_name(self) -> str:
         return self._model_name
 
-    @property
-    def dimensions(self) -> int:
-        return self._dimensions
+    async def generate_embeddings(self, inputs: list[str]) -> EmbeddingsResponse:
+        response = await self._client.post(
+            "/api/embed",
+            json={"model": self._model_name, "input": inputs},
+        )
+        response.raise_for_status()
+        payload = OllamaEmbeddingsResponse.model_validate(response.json())
 
-    def generate_embeddings(self, inputs: list[str]) -> EmbeddingsResponse:
-        vectors = self._model.encode(inputs)
+        if len(payload.embeddings) != len(inputs):
+            raise ValueError("Ollama returned an unexpected number of embedding vectors.")
+
+        dimensions = len(payload.embeddings[0])
+        if dimensions == 0:
+            raise ValueError("Ollama returned an empty embedding vector.")
+        if any(len(vector) != dimensions for vector in payload.embeddings):
+            raise ValueError("Ollama embedding vectors must all have the same dimension.")
+
         return EmbeddingsResponse(
-            embeddings=[vector.tolist() for vector in vectors],
-            model=self._model_name,
-            dimensions=self._dimensions,
+            embeddings=payload.embeddings,
+            model=payload.model,
+            dimensions=dimensions,
         )

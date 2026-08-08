@@ -13,10 +13,15 @@ class Settings(BaseSettings):
 
     service_name: str = Field(default="embeddings-api", alias="SERVICE_NAME")
     service_version: str | None = Field(default=None, alias="SERVICE_VERSION")
-    model_name: str = Field(default="BAAI/bge-small-en-v1.5", alias="MODEL_NAME")
-    model_path: Path = Field(
-        default=PROJECT_DIR / ".local" / "models" / "bge-small",
-        alias="MODEL_PATH",
+    model_name: str = Field(default="nomic-embed-text:v1.5", alias="MODEL_NAME")
+    ollama_base_url: str = Field(
+        default="http://localhost:11434",
+        alias="OLLAMA_BASE_URL",
+    )
+    ollama_timeout_seconds: float = Field(
+        default=300,
+        alias="OLLAMA_TIMEOUT_SECONDS",
+        gt=0,
     )
 
     @field_validator("service_version", mode="before")
@@ -25,14 +30,6 @@ class Settings(BaseSettings):
         if value == "":
             return None
         return value
-
-    @field_validator("model_path", mode="before")
-    @classmethod
-    def resolve_model_path(cls, value: str | Path) -> Path:
-        path = Path(value)
-        if path.is_absolute():
-            return path
-        return PROJECT_DIR / path
 
 
 def get_settings() -> Settings:

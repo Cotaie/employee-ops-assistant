@@ -61,8 +61,10 @@ docker compose -f infra/compose.yaml up -d --build
 
 Notes:
 
-- `embeddings-api` reuses the local model directory from `services/embeddings_api/.local/models` through a bind mount.
-- `embeddings-api` expects the local model to already exist at `services/embeddings_api/.local/models/bge-small`.
+- `embeddings-api` calls the host Ollama service with the pinned
+  `nomic-embed-text:v1.5` embedding model.
+- Pull both required Ollama models before starting locally:
+  `ollama pull qwen3:1.7b` and `ollama pull nomic-embed-text:v1.5`.
 - `ingestion-api` receives `EMBEDDINGS_API_URL`, `CHROMA_HOST`, and `CHROMA_PORT` for future integration work.
 - OAuth2 Proxy port `4180` and Gradio port `7860` are available only inside the
   Compose network, so callers cannot bypass authentication.

@@ -33,11 +33,12 @@ services:
     environment:
       SERVICE_NAME: embeddings-api
       SERVICE_VERSION: docker
-      MODEL_NAME: BAAI/bge-small-en-v1.5
-      MODEL_PATH: /data/models/bge-small
+      MODEL_NAME: nomic-embed-text:v1.5
+      OLLAMA_BASE_URL: http://host.docker.internal:11434
+      OLLAMA_TIMEOUT_SECONDS: "300"
       PYTHONPATH: /app/libs/contracts/src:/app/services/embeddings_api/src
-    volumes:
-      - ../services/embeddings_api/.local/models:/data/models
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
 
   ingestion-api:
     build:
