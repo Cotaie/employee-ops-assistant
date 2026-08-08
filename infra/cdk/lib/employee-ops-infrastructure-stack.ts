@@ -24,6 +24,8 @@ import {
 } from "aws-cdk-lib/aws-iam";
 import type { Construct } from "constructs";
 
+import { createInstanceUserData } from "./instance-user-data";
+
 const UBUNTU_2604_AMI_PARAMETER =
   "/aws/service/canonical/ubuntu/server/26.04/stable/current/amd64/hvm/ebs-gp3/ami-id";
 
@@ -99,6 +101,7 @@ export class EmployeeOpsInfrastructureStack extends Stack {
         os: OperatingSystemType.LINUX,
       },
     );
+    const userData = createInstanceUserData();
 
     this.instance = new Instance(this, "Instance", {
       associatePublicIpAddress: true,
@@ -120,6 +123,7 @@ export class EmployeeOpsInfrastructureStack extends Stack {
       requireImdsv2: true,
       role: this.instanceRole,
       securityGroup: this.instanceSecurityGroup,
+      userData,
       vpc: this.vpc,
       vpcSubnets: {
         subnetType: SubnetType.PUBLIC,

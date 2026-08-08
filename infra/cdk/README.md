@@ -64,8 +64,25 @@ The synthesized stack adds an `employee-ops-assistant` instance with:
 - IMDSv2 required for instance metadata credentials.
 
 This instance will be additional to the existing manually managed instance and
-will incur EC2 and EBS charges if deployed. User data, application deployment,
-and Elastic IP cutover are intentionally deferred to later changes.
+will incur EC2 and EBS charges if deployed. Application configuration, Compose
+startup, and Elastic IP cutover are intentionally deferred to later changes.
+
+## First-boot user data
+
+On its first boot, cloud-init runs a non-interactive setup script that:
+
+- Updates Ubuntu and installs Git and required package-management tools.
+- Creates and persists a 4 GiB swap file.
+- Installs Docker Engine, Buildx, and the Compose plugin from Docker's official
+  Ubuntu repository, adds `ubuntu` to the `docker` group, and enables Docker.
+- Installs Ollama, binds it to `0.0.0.0:11434` for host-to-container access,
+  enables its systemd service, and downloads `qwen3:1.7b`.
+- Clones the public repository to
+  `/home/ubuntu/apps/employee-ops-assistant` as the `ubuntu` user.
+
+The bootstrap intentionally does not create `.env` files, download the
+embeddings model, build application images, or start Docker Compose. First-boot
+output is available on EC2 in `/var/log/cloud-init-output.log`.
 
 ## Local validation
 
