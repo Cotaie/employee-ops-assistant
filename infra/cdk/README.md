@@ -80,18 +80,19 @@ GitHub.
 The role trust policy accepts only workflows from
 `Cotaie/employee-ops-assistant` running on the `main` branch. Its permissions
 are limited to logging in to ECR, checking existing image tags, pushing to the
-five application repositories, and sending the approved Systems Manager shell
-document to the tagged deployment instance.
+five application repositories, resolving the running deployment instance by
+tag, and sending the approved Systems Manager shell document to that instance.
 
 After CI succeeds for a commit on `main`, `.github/workflows/cd.yaml` checks
 out that exact commit, builds each application image, and pushes it with the
 commit SHA as its immutable ECR tag. A rerun skips a tag that already exists.
-After every image is available, the workflow sends a command through Systems
-Manager to the single instance tagged `EmployeeOpsDeploymentTarget=true`.
-The command checks out the validated commit, logs Docker in to ECR, pulls the
-commit-tagged images, and recreates the stack without building on EC2. GitHub
-Actions polls the command status and fails the deployment job if the remote
-command fails or does not finish within 15 minutes.
+After every image is available, the workflow resolves exactly one running
+instance tagged `EmployeeOpsDeploymentTarget=true`, then sends it a command
+through Systems Manager. The command checks out the validated commit, logs
+Docker in to ECR, pulls the commit-tagged images, and recreates the stack
+without building on EC2. GitHub Actions polls the command status and fails the
+deployment job if the remote command fails or does not finish within 15
+minutes.
 
 ## EC2 instance
 

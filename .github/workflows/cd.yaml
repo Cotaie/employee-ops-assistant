@@ -87,6 +87,22 @@ jobs:
         env:
           IMAGE_TAG: ${{ github.event.workflow_run.head_sha }}
         run: |
+          instance_ids=$(aws ec2 describe-instances \
+            --filters \
+              Name=tag:EmployeeOpsDeploymentTarget,Values=true \
+              Name=instance-state-name,Values=running \
+            --query 'Reservations[].Instances[].InstanceId' \
+            --output json)
+          instance_count=$(jq 'length' <<<"${instance_ids}")
+
+          if [[ "${instance_count}" != "1" ]]; then
+            echo "Expected exactly one running deployment target, found ${instance_count}."
+            exit 1
+          fi
+
+          instance_id=$(jq -r '.[0]' <<<"${instance_ids}")
+          echo "Deployment target: ${instance_id}"
+
           parameters=$(jq -n --arg image_tag "${IMAGE_TAG}" '{
             commands: [
               "set -eu",
@@ -103,19 +119,13 @@ jobs:
 
           response=$(aws ssm send-command \
             --document-name AWS-RunShellScript \
-            --targets Key=tag:EmployeeOpsDeploymentTarget,Values=true \
+            --instance-ids "${instance_id}" \
             --comment "Deploy Employee Ops Assistant ${IMAGE_TAG}" \
             --timeout-seconds 900 \
             --parameters "${parameters}")
 
           command_id=$(jq -r '.Command.CommandId' <<<"${response}")
-          target_count=$(jq -r '.Command.TargetCount' <<<"${response}")
           echo "Systems Manager command: ${command_id}"
-
-          if [[ "${target_count}" != "1" ]]; then
-            echo "Expected exactly one deployment target, found ${target_count}."
-            exit 1
-          fi
 
           for attempt in $(seq 1 180); do
             status=$(aws ssm list-command-invocations \

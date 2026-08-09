@@ -99,6 +99,13 @@ export function grantGitHubSsmDeploymentAccess(
 
   role.addToPrincipalPolicy(
     new PolicyStatement({
+      actions: ["ec2:DescribeInstances"],
+      effect: Effect.ALLOW,
+      resources: ["*"],
+    }),
+  );
+  role.addToPrincipalPolicy(
+    new PolicyStatement({
       actions: ["ssm:SendCommand"],
       effect: Effect.ALLOW,
       resources: [runShellScriptDocumentArn],

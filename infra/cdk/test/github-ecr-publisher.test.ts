@@ -93,6 +93,10 @@ test("restricts Systems Manager deployment to tagged EC2 instances", () => {
     PolicyDocument: {
       Statement: Match.arrayWith([
         Match.objectLike({
+          Action: "ec2:DescribeInstances",
+          Resource: "*",
+        }),
+        Match.objectLike({
           Action: "ssm:SendCommand",
           Resource: {
             "Fn::Join": [
