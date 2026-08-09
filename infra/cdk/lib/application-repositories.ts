@@ -4,6 +4,7 @@ import {
   TagMutability,
   type IRepository,
 } from "aws-cdk-lib/aws-ecr";
+import type { IGrantable } from "aws-cdk-lib/aws-iam";
 import type { Construct } from "constructs";
 
 export const APPLICATION_IMAGE_NAMES = [
@@ -60,4 +61,13 @@ export function createApplicationRepositories(
       "retrieve-api",
     ),
   };
+}
+
+export function grantApplicationRepositoryPullAccess(
+  repositories: ApplicationRepositories,
+  grantee: IGrantable,
+): void {
+  for (const repository of Object.values(repositories)) {
+    repository.grantPull(grantee);
+  }
 }

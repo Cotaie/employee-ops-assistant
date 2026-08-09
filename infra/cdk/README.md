@@ -49,6 +49,10 @@ The role can read only the existing `employee-ops/agent-api` and
 `employee-ops/oauth2-proxy` Secrets Manager secrets. It does not grant
 administrator, general Secrets Manager, S3, or CloudWatch permissions.
 
+The role can also authenticate to ECR and pull image layers from only the five
+application repositories managed by this stack. It cannot push, overwrite, or
+delete images.
+
 ## Application image repositories
 
 The stack defines a private ECR repository for each custom application image:

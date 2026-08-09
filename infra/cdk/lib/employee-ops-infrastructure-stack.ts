@@ -28,6 +28,7 @@ import type { Construct } from "constructs";
 import type { ApplicationConfig } from "./application-config";
 import {
   createApplicationRepositories,
+  grantApplicationRepositoryPullAccess,
   type ApplicationRepositories,
 } from "./application-repositories";
 import { createInstanceUserData } from "./instance-user-data";
@@ -87,6 +88,10 @@ export class EmployeeOpsInfrastructureStack extends Stack {
         ),
       ],
     });
+    grantApplicationRepositoryPullAccess(
+      this.applicationRepositories,
+      this.instanceRole,
+    );
 
     const agentApiSecret = Secret.fromSecretNameV2(
       this,
