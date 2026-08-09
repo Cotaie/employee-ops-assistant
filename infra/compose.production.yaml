@@ -1,0 +1,15 @@
+services:
+  agent-api:
+    image: ${ECR_REGISTRY:-634432338572.dkr.ecr.eu-central-1.amazonaws.com}/employee-ops-assistant/agent-api:${IMAGE_TAG:?IMAGE_TAG must be set}
+
+  embeddings-api:
+    image: ${ECR_REGISTRY:-634432338572.dkr.ecr.eu-central-1.amazonaws.com}/employee-ops-assistant/embeddings-api:${IMAGE_TAG:?IMAGE_TAG must be set}
+
+  gradio-ui:
+    image: ${ECR_REGISTRY:-634432338572.dkr.ecr.eu-central-1.amazonaws.com}/employee-ops-assistant/gradio-ui:${IMAGE_TAG:?IMAGE_TAG must be set}
+
+  ingestion-api:
+    image: ${ECR_REGISTRY:-634432338572.dkr.ecr.eu-central-1.amazonaws.com}/employee-ops-assistant/ingestion-api:${IMAGE_TAG:?IMAGE_TAG must be set}
+
+  retrieve-api:
+    image: ${ECR_REGISTRY:-634432338572.dkr.ecr.eu-central-1.amazonaws.com}/employee-ops-assistant/retrieve-api:${IMAGE_TAG:?IMAGE_TAG must be set}
