@@ -429,16 +429,16 @@ def create_app() -> gr.Blocks:
             reject_button,
             status,
         ]
-        message_input.submit(send_message, inputs=send_inputs, outputs=outputs)
-        send_button.click(send_message, inputs=send_inputs, outputs=outputs)
-        retry_button.click(
+        cast(Any, message_input).submit(send_message, inputs=send_inputs, outputs=outputs)
+        cast(Any, send_button).click(send_message, inputs=send_inputs, outputs=outputs)
+        cast(Any, retry_button).click(
             retry_message,
             inputs=[chatbot, thread_state, pending_message_state],
             outputs=outputs,
         )
         approval_inputs = [chatbot, thread_state, pending_approval_state]
-        approve_button.click(approve_tool, inputs=approval_inputs, outputs=outputs)
-        reject_button.click(reject_tool, inputs=approval_inputs, outputs=outputs)
+        cast(Any, approve_button).click(approve_tool, inputs=approval_inputs, outputs=outputs)
+        cast(Any, reject_button).click(reject_tool, inputs=approval_inputs, outputs=outputs)
 
     return cast(gr.Blocks, app)
 
