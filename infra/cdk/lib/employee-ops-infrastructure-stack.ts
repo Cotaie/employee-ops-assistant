@@ -26,6 +26,10 @@ import { Secret } from "aws-cdk-lib/aws-secretsmanager";
 import type { Construct } from "constructs";
 
 import type { ApplicationConfig } from "./application-config";
+import {
+  createApplicationRepositories,
+  type ApplicationRepositories,
+} from "./application-repositories";
 import { createInstanceUserData } from "./instance-user-data";
 
 const UBUNTU_2604_AMI_PARAMETER =
@@ -42,6 +46,7 @@ export interface EmployeeOpsInfrastructureStackProps extends StackProps {
 }
 
 export class EmployeeOpsInfrastructureStack extends Stack {
+  public readonly applicationRepositories: ApplicationRepositories;
   public readonly instance: IInstance;
   public readonly instanceRole: IRole;
   public readonly instanceSecurityGroup: ISecurityGroup;
@@ -53,6 +58,8 @@ export class EmployeeOpsInfrastructureStack extends Stack {
     props: EmployeeOpsInfrastructureStackProps,
   ) {
     super(scope, id, props);
+
+    this.applicationRepositories = createApplicationRepositories(this);
 
     this.vpc = Vpc.fromLookup(this, "DefaultVpc", {
       isDefault: true,

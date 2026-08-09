@@ -49,6 +49,23 @@ The role can read only the existing `employee-ops/agent-api` and
 `employee-ops/oauth2-proxy` Secrets Manager secrets. It does not grant
 administrator, general Secrets Manager, S3, or CloudWatch permissions.
 
+## Application image repositories
+
+The stack defines a private ECR repository for each custom application image:
+
+- `employee-ops-assistant/agent-api`
+- `employee-ops-assistant/embeddings-api`
+- `employee-ops-assistant/gradio-ui`
+- `employee-ops-assistant/ingestion-api`
+- `employee-ops-assistant/retrieve-api`
+
+Images are scanned when pushed and tags are immutable, so a commit tag cannot
+be overwritten with different contents. Each repository retains its ten most
+recent images and is retained if the CloudFormation stack is deleted.
+
+This step creates image storage only. Docker Compose still builds images on
+the EC2 host until the ECR publishing and deployment workflows are added.
+
 ## EC2 instance
 
 The synthesized stack adds an `employee-ops-assistant` instance with:
