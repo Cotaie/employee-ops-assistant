@@ -51,3 +51,32 @@ jobs:
 
       - name: Synthesize CloudFormation
         run: npm run synth -- --quiet
+
+  docker:
+    name: Docker build (${{ matrix.image }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - image: agent-api
+            dockerfile: services/agent_api/Dockerfile
+          - image: embeddings-api
+            dockerfile: services/embeddings_api/Dockerfile
+          - image: gradio-ui
+            dockerfile: services/gradio_ui/Dockerfile
+          - image: ingestion-api
+            dockerfile: services/ingestion_api/Dockerfile
+          - image: retrieve-api
+            dockerfile: services/retrieve_api/Dockerfile
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+
+      - name: Build image
+        run: >-
+          docker build
+          --file "${{ matrix.dockerfile }}"
+          --tag "employee-ops/${{ matrix.image }}:${{ github.sha }}"
+          .
