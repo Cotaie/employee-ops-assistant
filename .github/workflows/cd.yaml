@@ -69,3 +69,78 @@ jobs:
 
           docker build --file "${{ matrix.dockerfile }}" --tag "${image_uri}" .
           docker push "${image_uri}"
+
+  deploy:
+    name: Deploy to EC2
+    needs:
+      - publish
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Authenticate to AWS with GitHub OIDC
+        uses: aws-actions/configure-aws-credentials@v6.2.3
+        with:
+          aws-region: eu-central-1
+          role-to-assume: arn:aws:iam::634432338572:role/employee-ops-github-ecr-publisher
+
+      - name: Deploy validated images through Systems Manager
+        env:
+          IMAGE_TAG: ${{ github.event.workflow_run.head_sha }}
+        run: |
+          parameters=$(jq -n --arg image_tag "${IMAGE_TAG}" '{
+            commands: [
+              "set -eu",
+              "cd /home/ubuntu/apps/employee-ops-assistant",
+              "sudo -u ubuntu git fetch origin main",
+              ("sudo -u ubuntu git checkout --detach " + $image_tag),
+              ("export IMAGE_TAG=" + $image_tag),
+              "aws ecr get-login-password --region eu-central-1 | docker login --username AWS --password-stdin 634432338572.dkr.ecr.eu-central-1.amazonaws.com",
+              "docker compose -f infra/compose.yaml -f infra/compose.production.yaml pull",
+              "docker compose -f infra/compose.yaml -f infra/compose.production.yaml up -d --no-build --wait --wait-timeout 300",
+              "docker compose -f infra/compose.yaml -f infra/compose.production.yaml ps"
+            ]
+          }')
+
+          response=$(aws ssm send-command \
+            --document-name AWS-RunShellScript \
+            --targets Key=tag:EmployeeOpsDeploymentTarget,Values=true \
+            --comment "Deploy Employee Ops Assistant ${IMAGE_TAG}" \
+            --timeout-seconds 900 \
+            --parameters "${parameters}")
+
+          command_id=$(jq -r '.Command.CommandId' <<<"${response}")
+          target_count=$(jq -r '.Command.TargetCount' <<<"${response}")
+          echo "Systems Manager command: ${command_id}"
+
+          if [[ "${target_count}" != "1" ]]; then
+            echo "Expected exactly one deployment target, found ${target_count}."
+            exit 1
+          fi
+
+          for attempt in $(seq 1 180); do
+            status=$(aws ssm list-command-invocations \
+              --command-id "${command_id}" \
+              --query 'CommandInvocations[0].Status' \
+              --output text)
+
+            case "${status}" in
+              Success)
+                aws ssm list-command-invocations \
+                  --command-id "${command_id}" \
+                  --details
+                exit 0
+                ;;
+              Pending|InProgress|Delayed|None)
+                sleep 5
+                ;;
+              *)
+                aws ssm list-command-invocations \
+                  --command-id "${command_id}" \
+                  --details
+                exit 1
+                ;;
+            esac
+          done
+
+          echo "Deployment command did not finish within 15 minutes."
+          exit 1

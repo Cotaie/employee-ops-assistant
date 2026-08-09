@@ -1,4 +1,4 @@
-import { Duration } from "aws-cdk-lib";
+import { ArnFormat, Duration, Stack } from "aws-cdk-lib";
 import { CfnOIDCProvider } from "aws-cdk-lib/aws-iam";
 import {
   Effect,
@@ -13,6 +13,9 @@ import type { ApplicationRepositories } from "./application-repositories";
 
 const GITHUB_OIDC_ISSUER = "https://token.actions.githubusercontent.com";
 const GITHUB_OIDC_AUDIENCE = "sts.amazonaws.com";
+
+export const DEPLOYMENT_TARGET_TAG_KEY = "EmployeeOpsDeploymentTarget";
+export const DEPLOYMENT_TARGET_TAG_VALUE = "true";
 
 export interface GitHubEcrPublisherProps {
   readonly branch: string;
@@ -41,19 +44,20 @@ export function createGitHubEcrPublisherRole(
       },
       "sts:AssumeRoleWithWebIdentity",
     ),
-    description: "Publishes Employee Ops Assistant images from GitHub Actions",
+    description:
+      "Publishes and deploys Employee Ops Assistant images from GitHub Actions",
     maxSessionDuration: Duration.hours(1),
     roleName: "employee-ops-github-ecr-publisher",
   });
 
-  role.addToPolicy(
+  role.addToPrincipalPolicy(
     new PolicyStatement({
       actions: ["ecr:GetAuthorizationToken"],
       effect: Effect.ALLOW,
       resources: ["*"],
     }),
   );
-  role.addToPolicy(
+  role.addToPrincipalPolicy(
     new PolicyStatement({
       actions: [
         "ecr:BatchCheckLayerAvailability",
@@ -72,4 +76,52 @@ export function createGitHubEcrPublisherRole(
   );
 
   return role;
+}
+
+export function grantGitHubSsmDeploymentAccess(
+  scope: Construct,
+  role: IRole,
+): void {
+  const stack = Stack.of(scope);
+  const runShellScriptDocumentArn = stack.formatArn({
+    account: "",
+    arnFormat: ArnFormat.SLASH_RESOURCE_NAME,
+    resource: "document",
+    resourceName: "AWS-RunShellScript",
+    service: "ssm",
+  });
+  const deploymentTargetArn = stack.formatArn({
+    arnFormat: ArnFormat.SLASH_RESOURCE_NAME,
+    resource: "instance",
+    resourceName: "*",
+    service: "ec2",
+  });
+
+  role.addToPrincipalPolicy(
+    new PolicyStatement({
+      actions: ["ssm:SendCommand"],
+      effect: Effect.ALLOW,
+      resources: [runShellScriptDocumentArn],
+    }),
+  );
+  role.addToPrincipalPolicy(
+    new PolicyStatement({
+      actions: ["ssm:SendCommand"],
+      conditions: {
+        StringEquals: {
+          [`ssm:resourceTag/${DEPLOYMENT_TARGET_TAG_KEY}`]:
+            DEPLOYMENT_TARGET_TAG_VALUE,
+        },
+      },
+      effect: Effect.ALLOW,
+      resources: [deploymentTargetArn],
+    }),
+  );
+  role.addToPrincipalPolicy(
+    new PolicyStatement({
+      actions: ["ssm:ListCommandInvocations"],
+      effect: Effect.ALLOW,
+      resources: ["*"],
+    }),
+  );
 }

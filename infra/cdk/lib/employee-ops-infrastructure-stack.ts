@@ -1,4 +1,4 @@
-import { CfnOutput, Stack, type StackProps } from "aws-cdk-lib";
+import { CfnOutput, Stack, Tags, type StackProps } from "aws-cdk-lib";
 import {
   BlockDeviceVolume,
   EbsDeviceVolumeType,
@@ -32,7 +32,12 @@ import {
   type ApplicationRepositories,
 } from "./application-repositories";
 import { createInstanceUserData } from "./instance-user-data";
-import { createGitHubEcrPublisherRole } from "./github-ecr-publisher";
+import {
+  createGitHubEcrPublisherRole,
+  DEPLOYMENT_TARGET_TAG_KEY,
+  DEPLOYMENT_TARGET_TAG_VALUE,
+  grantGitHubSsmDeploymentAccess,
+} from "./github-ecr-publisher";
 
 const UBUNTU_2604_AMI_PARAMETER =
   "/aws/service/canonical/ubuntu/server/26.04/stable/current/amd64/hvm/ebs-gp3/ami-id";
@@ -178,5 +183,10 @@ export class EmployeeOpsInfrastructureStack extends Stack {
         subnetType: SubnetType.PUBLIC,
       },
     });
+    Tags.of(this.instance).add(
+      DEPLOYMENT_TARGET_TAG_KEY,
+      DEPLOYMENT_TARGET_TAG_VALUE,
+    );
+    grantGitHubSsmDeploymentAccess(this, githubEcrPublisherRole);
   }
 }

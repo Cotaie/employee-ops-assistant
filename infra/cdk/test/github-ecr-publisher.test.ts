@@ -3,7 +3,10 @@ import { Match, Template } from "aws-cdk-lib/assertions";
 import test from "node:test";
 
 import { createApplicationRepositories } from "../lib/application-repositories";
-import { createGitHubEcrPublisherRole } from "../lib/github-ecr-publisher";
+import {
+  createGitHubEcrPublisherRole,
+  grantGitHubSsmDeploymentAccess,
+} from "../lib/github-ecr-publisher";
 
 test("restricts GitHub image publishing to main and application repositories", () => {
   const app = new App();
@@ -62,6 +65,67 @@ test("restricts GitHub image publishing to main and application repositories", (
               }),
             ),
           ),
+        }),
+      ]),
+    },
+  });
+});
+
+test("restricts Systems Manager deployment to tagged EC2 instances", () => {
+  const app = new App();
+  const stack = new Stack(app, "TestStack", {
+    env: {
+      account: "123456789012",
+      region: "eu-central-1",
+    },
+  });
+  const repositories = createApplicationRepositories(stack);
+  const role = createGitHubEcrPublisherRole(stack, {
+    branch: "main",
+    repositories,
+    repository: "Cotaie/employee-ops-assistant",
+  });
+
+  grantGitHubSsmDeploymentAccess(stack, role);
+
+  const template = Template.fromStack(stack);
+  template.hasResourceProperties("AWS::IAM::Policy", {
+    PolicyDocument: {
+      Statement: Match.arrayWith([
+        Match.objectLike({
+          Action: "ssm:SendCommand",
+          Resource: {
+            "Fn::Join": [
+              "",
+              [
+                "arn:",
+                { Ref: "AWS::Partition" },
+                ":ssm:eu-central-1::document/AWS-RunShellScript",
+              ],
+            ],
+          },
+        }),
+        Match.objectLike({
+          Action: "ssm:SendCommand",
+          Condition: {
+            StringEquals: {
+              "ssm:resourceTag/EmployeeOpsDeploymentTarget": "true",
+            },
+          },
+          Resource: {
+            "Fn::Join": [
+              "",
+              [
+                "arn:",
+                { Ref: "AWS::Partition" },
+                ":ec2:eu-central-1:123456789012:instance/*",
+              ],
+            ],
+          },
+        }),
+        Match.objectLike({
+          Action: "ssm:ListCommandInvocations",
+          Resource: "*",
         }),
       ]),
     },
