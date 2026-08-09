@@ -10,6 +10,10 @@ const agentApiSecretName = app.node.tryGetContext("agentApiSecretName");
 const applicationConfig = parseApplicationConfig(
   app.node.tryGetContext("applicationConfig"),
 );
+const githubActionsBranch = app.node.tryGetContext("githubActionsBranch");
+const githubActionsRepository = app.node.tryGetContext(
+  "githubActionsRepository",
+);
 const instanceType = app.node.tryGetContext("instanceType");
 const keyPairName = app.node.tryGetContext("keyPairName");
 const oauth2ProxySecretName = app.node.tryGetContext("oauth2ProxySecretName");
@@ -27,6 +31,24 @@ if (
 
 if (typeof instanceType !== "string" || instanceType.length === 0) {
   throw new Error("CDK context instanceType must be a non-empty string.");
+}
+
+if (
+  typeof githubActionsBranch !== "string" ||
+  githubActionsBranch.length === 0
+) {
+  throw new Error(
+    "CDK context githubActionsBranch must be a non-empty string.",
+  );
+}
+
+if (
+  typeof githubActionsRepository !== "string" ||
+  githubActionsRepository.length === 0
+) {
+  throw new Error(
+    "CDK context githubActionsRepository must be a non-empty string.",
+  );
 }
 
 if (typeof keyPairName !== "string" || keyPairName.length === 0) {
@@ -70,6 +92,8 @@ new EmployeeOpsInfrastructureStack(app, "EmployeeOpsInfrastructureStack", {
     account: targetAccount,
     region: targetRegion,
   },
+  githubActionsBranch,
+  githubActionsRepository,
   instanceType,
   keyPairName,
   oauth2ProxySecretName,

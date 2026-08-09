@@ -20,6 +20,8 @@
         "redirectUrl": "https://employee-ops-cotaie.duckdns.org/oauth2/callback"
       }
     },
+    "githubActionsBranch": "main",
+    "githubActionsRepository": "Cotaie/employee-ops-assistant",
     "instanceType": "t2.medium",
     "keyPairName": "employee-ops-key",
     "oauth2ProxySecretName": "employee-ops/oauth2-proxy",

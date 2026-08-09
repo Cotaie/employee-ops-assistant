@@ -1,0 +1,71 @@
+name: Publish images
+
+on:
+  workflow_run:
+    workflows:
+      - CI
+    types:
+      - completed
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  publish:
+    name: Publish ${{ matrix.image }}
+    if: >-
+      github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.event == 'push' &&
+      github.event.workflow_run.head_branch == 'main' &&
+      github.event.workflow_run.head_repository.full_name == github.repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - image: agent-api
+            dockerfile: services/agent_api/Dockerfile
+          - image: embeddings-api
+            dockerfile: services/embeddings_api/Dockerfile
+          - image: gradio-ui
+            dockerfile: services/gradio_ui/Dockerfile
+          - image: ingestion-api
+            dockerfile: services/ingestion_api/Dockerfile
+          - image: retrieve-api
+            dockerfile: services/retrieve_api/Dockerfile
+    steps:
+      - name: Check out validated commit
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+
+      - name: Authenticate to AWS with GitHub OIDC
+        uses: aws-actions/configure-aws-credentials@v6.2.3
+        with:
+          aws-region: eu-central-1
+          role-to-assume: arn:aws:iam::634432338572:role/employee-ops-github-ecr-publisher
+
+      - name: Log Docker in to Amazon ECR
+        id: ecr-login
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Build and publish image
+        env:
+          ECR_REGISTRY: ${{ steps.ecr-login.outputs.registry }}
+          IMAGE_NAME: ${{ matrix.image }}
+          IMAGE_TAG: ${{ github.event.workflow_run.head_sha }}
+        run: |
+          repository_name="employee-ops-assistant/${IMAGE_NAME}"
+          image_uri="${ECR_REGISTRY}/${repository_name}:${IMAGE_TAG}"
+
+          if aws ecr describe-images \
+            --repository-name "${repository_name}" \
+            --image-ids "imageTag=${IMAGE_TAG}" >/dev/null 2>&1; then
+            echo "${image_uri} already exists; skipping immutable tag."
+            exit 0
+          fi
+
+          docker build --file "${{ matrix.dockerfile }}" --tag "${image_uri}" .
+          docker push "${image_uri}"

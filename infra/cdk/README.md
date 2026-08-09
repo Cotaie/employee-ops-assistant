@@ -66,6 +66,24 @@ recent images and is retained if the CloudFormation stack is deleted.
 This step creates image storage only. Docker Compose still builds images on
 the EC2 host until the ECR publishing and deployment workflows are added.
 
+## GitHub image publishing
+
+The stack defines the `employee-ops-github-ecr-publisher` IAM role and a
+GitHub OpenID Connect provider. GitHub Actions can exchange its short-lived
+OIDC token for temporary AWS credentials without storing AWS access keys in
+GitHub.
+
+The role trust policy accepts only workflows from
+`Cotaie/employee-ops-assistant` running on the `main` branch. Its permissions
+are limited to logging in to ECR, checking existing image tags, and pushing to
+the five application repositories.
+
+After CI succeeds for a commit on `main`, `.github/workflows/cd.yaml` checks
+out that exact commit, builds each application image, and pushes it with the
+commit SHA as its immutable ECR tag. A rerun skips a tag that already exists.
+This workflow publishes images only; updating the EC2 deployment remains a
+later CD step.
+
 ## EC2 instance
 
 The synthesized stack adds an `employee-ops-assistant` instance with:

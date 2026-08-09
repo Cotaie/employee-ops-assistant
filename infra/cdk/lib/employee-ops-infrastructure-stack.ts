@@ -1,4 +1,4 @@
-import { Stack, type StackProps } from "aws-cdk-lib";
+import { CfnOutput, Stack, type StackProps } from "aws-cdk-lib";
 import {
   BlockDeviceVolume,
   EbsDeviceVolumeType,
@@ -31,6 +31,7 @@ import {
   type ApplicationRepositories,
 } from "./application-repositories";
 import { createInstanceUserData } from "./instance-user-data";
+import { createGitHubEcrPublisherRole } from "./github-ecr-publisher";
 
 const UBUNTU_2604_AMI_PARAMETER =
   "/aws/service/canonical/ubuntu/server/26.04/stable/current/amd64/hvm/ebs-gp3/ami-id";
@@ -38,6 +39,8 @@ const UBUNTU_2604_AMI_PARAMETER =
 export interface EmployeeOpsInfrastructureStackProps extends StackProps {
   readonly agentApiSecretName: string;
   readonly applicationConfig: ApplicationConfig;
+  readonly githubActionsBranch: string;
+  readonly githubActionsRepository: string;
   readonly instanceType: string;
   readonly keyPairName: string;
   readonly oauth2ProxySecretName: string;
@@ -60,6 +63,16 @@ export class EmployeeOpsInfrastructureStack extends Stack {
     super(scope, id, props);
 
     this.applicationRepositories = createApplicationRepositories(this);
+    const githubEcrPublisherRole = createGitHubEcrPublisherRole(this, {
+      branch: props.githubActionsBranch,
+      repositories: this.applicationRepositories,
+      repository: props.githubActionsRepository,
+    });
+
+    new CfnOutput(this, "GitHubEcrPublisherRoleArn", {
+      description: "IAM role assumed by the GitHub image publishing workflow",
+      value: githubEcrPublisherRole.roleArn,
+    });
 
     this.vpc = Vpc.fromLookup(this, "DefaultVpc", {
       isDefault: true,
