@@ -1,0 +1,53 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  python:
+    name: Python validation
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+
+      - name: Install uv and Python
+        uses: astral-sh/setup-uv@v9.0.0
+        with:
+          enable-cache: true
+          python-version: "3.12"
+
+      - name: Validate Python workspace
+        run: bash scripts/check-workspace.sh
+
+  cdk:
+    name: CDK validation
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: infra/cdk
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+
+      - name: Install Node.js
+        uses: actions/setup-node@v6
+        with:
+          cache: npm
+          cache-dependency-path: infra/cdk/package-lock.json
+          node-version: "22"
+
+      - name: Install CDK dependencies
+        run: npm ci
+
+      - name: Type-check CDK
+        run: npm run build
+
+      - name: Synthesize CloudFormation
+        run: npm run synth -- --quiet

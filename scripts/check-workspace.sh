@@ -12,6 +12,7 @@ projects=(
     "services/embeddings_api"
     "services/ingestion_api"
     "services/gradio_ui"
+    "services/retrieve_api"
     "libs/clients"
     "libs/contracts"
 )
