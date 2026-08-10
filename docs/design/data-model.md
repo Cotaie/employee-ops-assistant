@@ -59,49 +59,15 @@ The orchestration state may also include uploaded-file handling state:
 
 ## 3. Conversation Persistence Model
 
-Chatbot conversations are persisted in PostgreSQL relational tables.
+Active conversations use LangGraph's shallow Redis checkpointer:
 
-Minimum persisted entities:
+- `thread_id` identifies the conversation
+- only the latest checkpoint for a thread is retained
+- the checkpoint contains the current graph state, including accumulated messages
+- inactive checkpoints expire after a configurable TTL, refreshed when read
 
-- `conversation`
-  - `conversation_id`
-  - `employee_id`
-  - `started_at`
-  - `updated_at`
-  - `status`
-
-- `conversation_message`
-  - `message_id`
-  - `conversation_id`
-  - `sender_type`
-  - `message_text`
-  - `created_at`
-  - `citations_payload` if present
-  - `action_payload` if present
-
-- `conversation_action`
-  - `action_id`
-  - `conversation_id`
-  - `action_type`
-  - `action_status`
-  - `confirmation_required`
-  - `created_at`
-  - `updated_at`
-
-- `conversation_summary`
-  - `conversation_summary_id`
-  - `conversation_id`
-  - `summary_text`
-  - `covered_message_through`
-  - `created_at`
-  - `updated_at`
-
-Conversation compaction strategy:
-
-- full message history is preserved in PostgreSQL
-- older conversation context is summarized for runtime use
-- summarization is triggered when the active context exceeds a configured token threshold
-- recent messages remain available in raw form alongside the stored summary
+This is short-term execution memory, not a permanent conversation archive.
+Conversation summarization and durable long-term history may be added separately.
 
 Model provider configuration must support:
 

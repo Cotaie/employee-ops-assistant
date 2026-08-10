@@ -5,7 +5,7 @@ from atlassian import Jira
 from fastapi import FastAPI
 from github import Github
 from langchain_core.tools import BaseTool
-from langgraph.checkpoint.postgres.aio import AsyncPostgresSaver
+from langgraph.checkpoint.redis.ashallow import AsyncShallowRedisSaver
 
 from agent_api.app.api.routes import register_routes
 from agent_api.app.clients.github import create_github_client
@@ -40,10 +40,15 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
 
     try:
         model = create_chat_model(settings)
-        database_url = settings.database_url.get_secret_value()
+        redis_url = settings.redis_url.get_secret_value()
 
-        async with AsyncPostgresSaver.from_conn_string(database_url) as checkpointer:
-            await checkpointer.setup()
+        async with AsyncShallowRedisSaver.from_conn_string(
+            redis_url,
+            ttl={
+                "default_ttl": settings.checkpoint_ttl_minutes,
+                "refresh_on_read": True,
+            },
+        ) as checkpointer:
             app.state.settings = settings
             app.state.agent = build_agent(
                 model,

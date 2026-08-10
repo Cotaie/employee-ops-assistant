@@ -37,9 +37,9 @@ Model provider policy:
 
 Context compaction policy:
 
-- full conversation history remains stored in PostgreSQL
-- when active conversation context exceeds a configured token threshold, older conversation state is summarized
-- runtime model context is built from the stored summary plus recent raw messages
+- Redis retains only the latest LangGraph checkpoint for each active thread
+- inactive checkpoints expire after the configured TTL
+- conversation summarization is deferred and can later compact the messages held in the latest state
 
 ## 2. Agent Design
 

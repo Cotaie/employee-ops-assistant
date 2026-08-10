@@ -22,9 +22,14 @@ class Settings(BaseSettings):
     llm_api_key: SecretStr | None = Field(default=None, alias="LLM_API_KEY")
     llm_model: str = Field(default="openai:gpt-5.4-mini", alias="LLM_MODEL")
     llm_timeout_seconds: float = Field(default=300, alias="LLM_TIMEOUT_SECONDS", gt=0)
-    database_url: SecretStr = Field(
-        default=SecretStr("postgresql://agent:agent@localhost:5432/agent_checkpoints"),
-        alias="DATABASE_URL",
+    redis_url: SecretStr = Field(
+        default=SecretStr("redis://localhost:6379"),
+        alias="REDIS_URL",
+    )
+    checkpoint_ttl_minutes: int = Field(
+        default=1440,
+        alias="CHECKPOINT_TTL_MINUTES",
+        gt=0,
     )
     ollama_base_url: str = Field(
         default="http://localhost:11434",

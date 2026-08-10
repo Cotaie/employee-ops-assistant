@@ -179,12 +179,14 @@ def fake_agent(monkeypatch: pytest.MonkeyPatch) -> FakeAgent:
     agent = FakeAgent()
 
     @asynccontextmanager
-    async def from_conn_string(database_url: str):
-        del database_url
-        yield AsyncMock()
+    async def from_conn_string(redis_url: str, *, ttl: dict[str, object]):
+        del redis_url, ttl
+        checkpointer = AsyncMock()
+        await checkpointer.asetup()
+        yield checkpointer
 
     monkeypatch.setattr(
-        main.AsyncPostgresSaver,
+        main.AsyncShallowRedisSaver,
         "from_conn_string",
         from_conn_string,
     )

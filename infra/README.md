@@ -4,6 +4,7 @@ This folder contains local container infrastructure for Employee Ops Assistant.
 
 Current services:
 
+- `redis` for the Agent API's latest per-thread LangGraph checkpoint
 - `chroma` for vector storage
 - `embeddings-api` for embedding generation
 - `ingestion-api` for document ingestion
@@ -39,7 +40,7 @@ The Compose files have separate responsibilities:
 - `compose.yaml` is the shared base. It defines the services, private network
   communication, environment variables, dependencies, and persistent volumes.
 - `compose.local.yaml` extends the base for local development. It publishes
-  Postgres, Chroma, and internal API ports on `127.0.0.1` for diagnostics.
+  Redis, Chroma, and internal API ports on `127.0.0.1` for diagnostics.
 - `compose.production.yaml` extends the base for EC2. It selects the five
   application images stored in ECR using the required `IMAGE_TAG` value.
 
@@ -72,7 +73,7 @@ IMAGE_TAG=<commit-sha> docker compose \
 
 ## Local development with individual service access
 
-The base configuration publishes only Caddy. To also reach Postgres, Chroma,
+The base configuration publishes only Caddy. To also reach Redis, Chroma,
 and the internal APIs individually through `localhost`, add the local override:
 
 ```bash
@@ -121,15 +122,18 @@ Notes:
 
 - `embeddings-api` calls the host Ollama service with the pinned
   `nomic-embed-text:v1.5` embedding model.
+- `agent-api` uses Redis's shallow LangGraph checkpointer, retaining only the
+  latest checkpoint per thread. Inactive checkpoints expire after 24 hours;
+  access refreshes that TTL.
 - Pull both required Ollama models before starting locally:
   `ollama pull qwen3:1.7b` and `ollama pull nomic-embed-text:v1.5`.
 - `ingestion-api` receives `EMBEDDINGS_API_URL`, `CHROMA_HOST`, and `CHROMA_PORT` for future integration work.
 - OAuth2 Proxy port `4180` and Gradio port `7860` are available only inside the
   Compose network, so callers cannot bypass authentication.
-- `compose.local.yaml` optionally publishes Postgres, Chroma, and API ports for
+- `compose.local.yaml` optionally publishes Redis, Chroma, and API ports for
   local diagnostics; never include it in the EC2 deployment command.
 - `compose.production.yaml` changes only the five application image names.
-  PostgreSQL, Chroma, OAuth2 Proxy, and Caddy continue using their pinned public
+  Redis, Chroma, OAuth2 Proxy, and Caddy continue using their pinned public
   images from the base configuration.
 - See [`caddy/README.md`](caddy/README.md) for local callback configuration and
   EC2 automatic HTTPS setup.

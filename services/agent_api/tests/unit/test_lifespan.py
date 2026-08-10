@@ -11,16 +11,21 @@ from agent_api.app.core.config import Settings
 
 
 @pytest.fixture(autouse=True)
-def postgres_checkpointer(monkeypatch: pytest.MonkeyPatch) -> AsyncMock:
+def redis_checkpointer(monkeypatch: pytest.MonkeyPatch) -> AsyncMock:
     checkpointer = AsyncMock()
 
     @asynccontextmanager
-    async def from_conn_string(database_url: str):
-        assert database_url == "postgresql://agent:agent@localhost:5432/agent_checkpoints"
+    async def from_conn_string(redis_url: str, *, ttl: dict[str, object]):
+        assert redis_url == "redis://localhost:6379"
+        assert ttl == {
+            "default_ttl": 1440,
+            "refresh_on_read": True,
+        }
+        await checkpointer.asetup()
         yield checkpointer
 
     monkeypatch.setattr(
-        main.AsyncPostgresSaver,
+        main.AsyncShallowRedisSaver,
         "from_conn_string",
         from_conn_string,
     )
@@ -30,7 +35,7 @@ def postgres_checkpointer(monkeypatch: pytest.MonkeyPatch) -> AsyncMock:
 @pytest.mark.anyio
 async def test_lifespan_composes_jira_tools_into_agent(
     monkeypatch: pytest.MonkeyPatch,
-    postgres_checkpointer: AsyncMock,
+    redis_checkpointer: AsyncMock,
 ) -> None:
     settings = Settings(
         _env_file=None,
@@ -59,9 +64,7 @@ async def test_lifespan_composes_jira_tools_into_agent(
         "build_agent",
         lambda value, configured_tools, checkpointer: (
             agent
-            if value is model
-            and configured_tools == tools
-            and checkpointer is postgres_checkpointer
+            if value is model and configured_tools == tools and checkpointer is redis_checkpointer
             else None
         ),
     )
@@ -71,14 +74,14 @@ async def test_lifespan_composes_jira_tools_into_agent(
         assert app.state.settings is settings
         assert app.state.agent is agent
 
-    postgres_checkpointer.setup.assert_awaited_once_with()
+    redis_checkpointer.asetup.assert_awaited_once_with()
     assert jira.closed
 
 
 @pytest.mark.anyio
 async def test_lifespan_composes_github_tools_and_closes_client(
     monkeypatch: pytest.MonkeyPatch,
-    postgres_checkpointer: AsyncMock,
+    redis_checkpointer: AsyncMock,
 ) -> None:
     settings = Settings(
         _env_file=None,
@@ -106,9 +109,7 @@ async def test_lifespan_composes_github_tools_and_closes_client(
         "build_agent",
         lambda value, configured_tools, checkpointer: (
             agent
-            if value is model
-            and configured_tools == tools
-            and checkpointer is postgres_checkpointer
+            if value is model and configured_tools == tools and checkpointer is redis_checkpointer
             else None
         ),
     )
@@ -123,7 +124,7 @@ async def test_lifespan_composes_github_tools_and_closes_client(
 @pytest.mark.anyio
 async def test_lifespan_passes_unbound_model_to_agent(
     monkeypatch: pytest.MonkeyPatch,
-    postgres_checkpointer: AsyncMock,
+    redis_checkpointer: AsyncMock,
 ) -> None:
     settings = Settings(_env_file=None, LLM_API_KEY=SecretStr("secret-key"))
     model = object()
@@ -134,7 +135,7 @@ async def test_lifespan_passes_unbound_model_to_agent(
     def build_agent(value: object, tools: list[Any], checkpointer: object) -> object:
         assert value is model
         assert tools == []
-        assert checkpointer is postgres_checkpointer
+        assert checkpointer is redis_checkpointer
         return agent
 
     monkeypatch.setattr(main, "build_agent", build_agent)

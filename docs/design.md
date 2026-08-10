@@ -24,16 +24,16 @@ The design uses:
 - LangGraph
 - Frappe HR as the HR system integration target
 - Chroma for vector storage and semantic retrieval
-- PostgreSQL relational storage for chatbot conversation persistence
+- Redis shallow checkpoints for short-term chatbot conversation state
 
 Storage is intentionally split:
 
 - Chroma stores enterprise knowledge embeddings and oversized uploaded-file embeddings for semantic retrieval
-- PostgreSQL stores transactional application data such as conversations, messages, and action state
+- Redis stores the latest LangGraph checkpoint for each active conversation thread
 
 Uploaded employee files are temporary inputs. Any raw uploaded file and any derived indexed content created only for request-time analysis must be deleted after use.
 
-Conversation context is compacted at runtime through summary generation when the active conversation context exceeds a configured token threshold, while the full conversation history remains stored in PostgreSQL.
+Inactive conversation checkpoints expire after a configurable TTL. Conversation summarization and long-term history are deferred enhancements.
 
 ## 2. Core Design Goals
 
@@ -52,7 +52,7 @@ Conversation context is compacted at runtime through summary generation when the
 - the system must include at least two real AI agents with distinct roles and tool access
 - the HR system used for employee-specific HR data and leave-related operations is Frappe HR
 - the vector store technology is Chroma
-- chatbot conversations are persisted in PostgreSQL relational tables
+- active chatbot threads retain their latest LangGraph checkpoint in Redis
 - the system supports a configurable primary LLM and configurable fallback LLM, each independently enableable or disableable
 
 ## 4. High-Level Component Model

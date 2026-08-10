@@ -1,19 +1,16 @@
 services:
-  postgres:
-    image: postgres:17
-    container_name: employee-ops-postgres
+  redis:
+    image: redis:8.2.8-alpine
+    container_name: employee-ops-redis
     restart: unless-stopped
-    environment:
-      POSTGRES_DB: agent_checkpoints
-      POSTGRES_USER: agent
-      POSTGRES_PASSWORD: agent
+    command: ["redis-server", "--appendonly", "yes"]
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U agent -d agent_checkpoints"]
+      test: ["CMD", "redis-cli", "ping"]
       interval: 5s
       timeout: 5s
       retries: 10
     volumes:
-      - postgres-data:/var/lib/postgresql/data
+      - redis-data:/data
 
   chroma:
     image: chromadb/chroma:0.6.3
@@ -79,7 +76,7 @@ services:
     container_name: employee-ops-agent-api
     restart: unless-stopped
     depends_on:
-      postgres:
+      redis:
         condition: service_healthy
     env_file:
       - ../services/agent_api/.env
@@ -87,7 +84,8 @@ services:
       SERVICE_NAME: agent-api
       SERVICE_VERSION: docker
       OLLAMA_BASE_URL: http://host.docker.internal:11434
-      DATABASE_URL: postgresql://agent:agent@postgres:5432/agent_checkpoints
+      REDIS_URL: redis://redis:6379
+      CHECKPOINT_TTL_MINUTES: "1440"
     extra_hosts:
       - "host.docker.internal:host-gateway"
 
@@ -150,4 +148,4 @@ volumes:
   caddy-config:
   caddy-data:
   chroma-data:
-  postgres-data:
+  redis-data:
