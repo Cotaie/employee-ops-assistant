@@ -33,7 +33,9 @@ Storage is intentionally split:
 
 Uploaded employee files are temporary inputs. Any raw uploaded file and any derived indexed content created only for request-time analysis must be deleted after use.
 
-Inactive conversation checkpoints expire after a configurable TTL. Conversation summarization and long-term history are deferred enhancements.
+Inactive conversation checkpoints expire after a configurable TTL. At approximately
+4,000 tokens, older conversation context is summarized while the latest five messages
+remain intact. Durable long-term history is a deferred enhancement.
 
 ## 2. Core Design Goals
 

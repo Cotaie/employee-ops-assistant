@@ -66,8 +66,10 @@ Active conversations use LangGraph's shallow Redis checkpointer:
 - the checkpoint contains the current graph state, including accumulated messages
 - inactive checkpoints expire after a configurable TTL, refreshed when read
 
-This is short-term execution memory, not a permanent conversation archive.
-Conversation summarization and durable long-term history may be added separately.
+This is short-term execution memory, not a permanent conversation archive. When
+state reaches approximately 4,000 tokens, the older history is replaced by a summary
+while the latest five messages remain intact. Durable long-term history may be added
+separately.
 
 Model provider configuration must support:
 

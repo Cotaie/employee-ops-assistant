@@ -39,7 +39,8 @@ Context compaction policy:
 
 - Redis retains only the latest LangGraph checkpoint for each active thread
 - inactive checkpoints expire after the configured TTL
-- conversation summarization is deferred and can later compact the messages held in the latest state
+- at approximately 4,000 tokens, older state is summarized and the latest five messages remain intact
+- the compacted state is persisted as the thread's latest Redis checkpoint
 
 ## 2. Agent Design
 

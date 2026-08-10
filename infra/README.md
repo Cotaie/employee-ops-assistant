@@ -124,7 +124,8 @@ Notes:
   `nomic-embed-text:v1.5` embedding model.
 - `agent-api` uses Redis's shallow LangGraph checkpointer, retaining only the
   latest checkpoint per thread. Inactive checkpoints expire after 24 hours;
-  access refreshes that TTL.
+  access refreshes that TTL. At approximately 4,000 tokens, older conversation
+  history is summarized while the latest five messages remain intact.
 - Pull both required Ollama models before starting locally:
   `ollama pull qwen3:1.7b` and `ollama pull nomic-embed-text:v1.5`.
 - `ingestion-api` receives `EMBEDDINGS_API_URL`, `CHROMA_HOST`, and `CHROMA_PORT` for future integration work.

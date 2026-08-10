@@ -2,7 +2,7 @@ from collections.abc import Sequence
 from typing import Any
 
 from langchain.agents import AgentState, create_agent
-from langchain.agents.middleware import HumanInTheLoopMiddleware
+from langchain.agents.middleware import HumanInTheLoopMiddleware, SummarizationMiddleware
 from langchain.agents.middleware.types import InputAgentState, OutputAgentState
 from langchain_core.language_models.chat_models import BaseChatModel
 from langchain_core.tools import BaseTool
@@ -37,6 +37,11 @@ def build_agent(
     checkpointer: BaseCheckpointSaver[Any],
 ) -> AgentGraph:
     middleware = [
+        SummarizationMiddleware(
+            model=model,
+            trigger=("tokens", 4000),
+            keep=("messages", 5),
+        ),
         HumanInTheLoopMiddleware(
             interrupt_on={
                 "create_issue": {
@@ -46,7 +51,7 @@ def build_agent(
                     "allowed_decisions": ["approve", "reject"],
                 },
             }
-        )
+        ),
     ]
     return create_agent(
         model=model,
