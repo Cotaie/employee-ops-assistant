@@ -106,13 +106,13 @@ export function createInstanceUserData(props: InstanceUserDataProps): UserData {
     "trap 'rm -f \"$agent_api_secret_file\" \"$oauth2_proxy_secret_file\"' EXIT",
     `AWS_DEFAULT_REGION='${props.awsRegion}' aws secretsmanager get-secret-value --secret-id '${props.agentApiSecretName}' --query SecretString --output text > "$agent_api_secret_file"`,
     `AWS_DEFAULT_REGION='${props.awsRegion}' aws secretsmanager get-secret-value --secret-id '${props.oauth2ProxySecretName}' --query SecretString --output text > "$oauth2_proxy_secret_file"`,
-    "jq -e '(.JIRA_API_TOKEN | type == \"string\" and length > 0) and (.GITHUB_API_TOKEN | type == \"string\" and length > 0)' \"$agent_api_secret_file\" >/dev/null",
+    "jq -e '(.JIRA_API_TOKEN | type == \"string\" and length > 0) and (.GITHUB_API_TOKEN | type == \"string\" and length > 0) and (.TAVILY_API_KEY | type == \"string\" and length > 0)' \"$agent_api_secret_file\" >/dev/null",
     "jq -e '(.OAUTH2_PROXY_CLIENT_SECRET | type == \"string\" and length > 0) and (.OAUTH2_PROXY_COOKIE_SECRET | type == \"string\" and length > 0)' \"$oauth2_proxy_secret_file\" >/dev/null",
     decodeEnvironmentFileCommand(
       agentApiEnvironment,
       agentApiEnvironmentPath,
     ),
-    "jq -r '\"JIRA_API_TOKEN=\" + .JIRA_API_TOKEN, \"GITHUB_API_TOKEN=\" + .GITHUB_API_TOKEN' \"$agent_api_secret_file\" >> " +
+    "jq -r '\"JIRA_API_TOKEN=\" + .JIRA_API_TOKEN, \"GITHUB_API_TOKEN=\" + .GITHUB_API_TOKEN, \"TAVILY_API_KEY=\" + .TAVILY_API_KEY' \"$agent_api_secret_file\" >> " +
       agentApiEnvironmentPath,
     decodeEnvironmentFileCommand(
       oauth2ProxyEnvironment,

@@ -19,6 +19,7 @@ class Settings(BaseSettings):
     jira_api_token: SecretStr | None = Field(default=None, alias="JIRA_API_TOKEN")
     github_api_token: SecretStr | None = Field(default=None, alias="GITHUB_API_TOKEN")
     github_repository: str | None = Field(default=None, alias="GITHUB_REPOSITORY")
+    tavily_api_key: SecretStr | None = Field(default=None, alias="TAVILY_API_KEY")
     llm_api_key: SecretStr | None = Field(default=None, alias="LLM_API_KEY")
     llm_model: str = Field(default="openai:gpt-5.4-mini", alias="LLM_MODEL")
     llm_timeout_seconds: float = Field(default=300, alias="LLM_TIMEOUT_SECONDS", gt=0)

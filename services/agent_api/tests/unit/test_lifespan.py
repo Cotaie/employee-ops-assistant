@@ -122,6 +122,39 @@ async def test_lifespan_composes_github_tools_and_closes_client(
 
 
 @pytest.mark.anyio
+async def test_lifespan_composes_tavily_tools_into_agent(
+    monkeypatch: pytest.MonkeyPatch,
+    redis_checkpointer: AsyncMock,
+) -> None:
+    settings = Settings(
+        _env_file=None,
+        TAVILY_API_KEY=SecretStr("tvly-secret"),
+    )
+    tavily = object()
+    tools: list[Any] = [object()]
+    model = object()
+    agent = object()
+
+    monkeypatch.setattr(main, "get_settings", lambda: settings)
+    monkeypatch.setattr(main, "create_tavily_client", lambda value: tavily)
+    monkeypatch.setattr(main, "create_tavily_tools", lambda value: tools)
+    monkeypatch.setattr(main, "create_chat_model", lambda value: model)
+    monkeypatch.setattr(
+        main,
+        "build_agent",
+        lambda value, configured_tools, checkpointer: (
+            agent
+            if value is model and configured_tools == tools and checkpointer is redis_checkpointer
+            else None
+        ),
+    )
+
+    app = FastAPI()
+    async with main.lifespan(app):
+        assert app.state.agent is agent
+
+
+@pytest.mark.anyio
 async def test_lifespan_passes_unbound_model_to_agent(
     monkeypatch: pytest.MonkeyPatch,
     redis_checkpointer: AsyncMock,

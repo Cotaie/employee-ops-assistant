@@ -142,10 +142,10 @@ Non-sensitive, deployment-specific values are grouped by service under
 `applicationConfig` in `cdk.json`. Replace all placeholder Jira and Google
 values before deployment.
 
-The Agent API secret must contain `JIRA_API_TOKEN` and `GITHUB_API_TOKEN`. The
-OAuth2 Proxy secret must contain `OAUTH2_PROXY_CLIENT_SECRET` and
-`OAUTH2_PROXY_COOKIE_SECRET`. At first boot, user data combines those fields
-with `applicationConfig` to generate:
+The Agent API secret must contain `JIRA_API_TOKEN`, `GITHUB_API_TOKEN`, and
+`TAVILY_API_KEY`. The OAuth2 Proxy secret must contain
+`OAUTH2_PROXY_CLIENT_SECRET` and `OAUTH2_PROXY_COOKIE_SECRET`. At first boot,
+user data combines those fields with `applicationConfig` to generate:
 
 - `services/agent_api/.env`
 - `infra/oauth2-proxy/.env`

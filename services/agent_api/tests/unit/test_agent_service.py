@@ -41,4 +41,8 @@ def test_build_agent_configures_tools_hitl_and_checkpointer(
     assert summarization.trigger == ("tokens", 4000)
     assert summarization.keep == ("messages", 5)
 
-    assert isinstance(middleware[1], HumanInTheLoopMiddleware)
+    hitl = middleware[1]
+    assert isinstance(hitl, HumanInTheLoopMiddleware)
+    assert hitl.interrupt_on["web_search"] == {
+        "allowed_decisions": ["approve", "reject"],
+    }

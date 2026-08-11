@@ -11,10 +11,12 @@ from agent_api.app.api.routes import register_routes
 from agent_api.app.clients.github import create_github_client
 from agent_api.app.clients.jira import create_jira_client
 from agent_api.app.clients.llm import create_chat_model
+from agent_api.app.clients.tavily import create_tavily_client
 from agent_api.app.core.config import get_settings
 from agent_api.app.services.agent import build_agent
 from agent_api.app.tools.github import create_github_tools
 from agent_api.app.tools.jira import create_jira_tools
+from agent_api.app.tools.tavily import create_tavily_tools
 
 
 @asynccontextmanager
@@ -22,6 +24,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
     settings = get_settings()
     jira_tools: list[BaseTool] = []
     github_tools: list[BaseTool] = []
+    tavily_tools: list[BaseTool] = []
     jira: Jira | None = None
     github: Github | None = None
 
@@ -38,6 +41,10 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
         except ValueError:
             pass
 
+    if settings.tavily_api_key is not None:
+        tavily = create_tavily_client(settings)
+        tavily_tools = create_tavily_tools(tavily)
+
     try:
         model = create_chat_model(settings)
         redis_url = settings.redis_url.get_secret_value()
@@ -52,7 +59,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
             app.state.settings = settings
             app.state.agent = build_agent(
                 model,
-                [*jira_tools, *github_tools],
+                [*jira_tools, *github_tools, *tavily_tools],
                 checkpointer,
             )
             yield

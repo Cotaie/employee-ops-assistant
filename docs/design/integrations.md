@@ -57,7 +57,14 @@ This preserves the architecture and workflows without requiring access to real e
 
 The employee HR system integration target remains Frappe HR, accessed through its REST API or through an internal wrapper around that API.
 
-## 5. Development-Time UI
+## 5. Public Web Search
+
+- provider: [Tavily Search API](https://app.tavily.com/)
+- runtime: optional Agent API tool, enabled when `TAVILY_API_KEY` is configured
+- scope: current public information only; internal Jira and GitHub data use their dedicated tools
+- control: every search request requires human approval before execution
+
+## 6. Development-Time UI
 
 - Gradio is used as a development-only client for smoke tests and manual end-to-end validation
 - Gradio calls `AgentApi` and does not replace the production frontend
