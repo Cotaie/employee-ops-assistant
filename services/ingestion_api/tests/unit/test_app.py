@@ -101,25 +101,10 @@ def fake_chroma_startup(monkeypatch: pytest.MonkeyPatch) -> None:
     )
 
 
-def _temporary_document_payload() -> dict[str, object]:
-    return {
-        "document_name": "Uploaded Benefits Form",
-        "document_version": None,
-        "retention_mode": "temporary",
-        "category": None,
-        "content": "raw extracted text",
-        "source_uri": None,
-        "content_type": "application/pdf",
-        "metadata": {"source": "upload"},
-        "idempotency_key": "temp-doc-001",
-    }
-
-
-def _permanent_document_payload() -> dict[str, object]:
+def _document_payload() -> dict[str, object]:
     return {
         "document_name": "Annual Leave Policy",
         "document_version": "2026.1",
-        "retention_mode": "permanent",
         "category": "HR",
         "content": "Annual leave policy text.",
         "source_uri": None,
@@ -152,7 +137,7 @@ async def test_health_returns_service_metadata() -> None:
 
 
 @pytest.mark.anyio
-async def test_post_documents_uses_the_new_permanent_ingestion_route() -> None:
+async def test_post_documents_runs_synchronous_ingestion() -> None:
     app = create_app()
 
     async with app.router.lifespan_context(app):
@@ -165,24 +150,22 @@ async def test_post_documents_uses_the_new_permanent_ingestion_route() -> None:
             transport=transport,
             base_url="http://testserver",
         ) as client:
-            response = await client.post("/documents", json=_permanent_document_payload())
+            response = await client.post("/documents", json=_document_payload())
 
     body = response.json()
 
-    assert response.status_code == 202
+    assert response.status_code == 201
     assert body["document_id"].startswith("doc_")
     assert body["document_name"] == "Annual Leave Policy"
     assert body["document_version"] == "2026.1"
-    assert body["retention_mode"] == "permanent"
     assert body["category"] == "HR"
-    assert body["document_status"] == "active"
-    assert body["ingestion_status"] == "pending"
-    assert body["expires_on"] is None
+    assert body["chunk_count"] == 1
+    assert body["embedding_count"] == 1
     assert body["warnings"] == []
 
 
 @pytest.mark.anyio
-async def test_post_temporary_documents_uses_the_new_sync_route() -> None:
+async def test_temporary_documents_route_is_removed() -> None:
     app = create_app()
 
     async with app.router.lifespan_context(app):
@@ -197,20 +180,13 @@ async def test_post_temporary_documents_uses_the_new_sync_route() -> None:
         ) as client:
             response = await client.post(
                 "/temporary-documents",
-                json=_temporary_document_payload(),
+                json=_document_payload(),
             )
 
     body = response.json()
 
-    assert response.status_code == 200
-    assert body["document_id"].startswith("temp_")
-    assert body["document_name"] == "Uploaded Benefits Form"
-    assert body["retention_mode"] == "temporary"
-    assert body["document_status"] == "active"
-    assert body["ingestion_status"] == "success"
-    assert body["chunk_count"] == 1
-    assert body["embedding_count"] == 1
-    assert body["warnings"] == []
+    assert response.status_code == 404
+    assert body == {"detail": "Not Found"}
 
 
 @pytest.mark.anyio
@@ -223,7 +199,7 @@ async def test_old_uploaded_documents_route_is_gone() -> None:
             transport=transport,
             base_url="http://testserver",
         ) as client:
-            response = await client.post("/uploaded-documents", json=_temporary_document_payload())
+            response = await client.post("/uploaded-documents", json=_document_payload())
 
     assert response.status_code == 404
 
@@ -271,11 +247,8 @@ async def test_get_documents_returns_document_summaries() -> None:
                 "document_id": "temp_doc_1",
                 "document_name": "HR Policy",
                 "document_version": "2026.1",
-                "retention_mode": "temporary",
-                "document_status": "active",
                 "chunk_index": 0,
                 "created_on": "2026-07-13T11:22:41.024965+00:00",
-                "modified_on": "2026-07-13T11:22:41.024965+00:00",
             },
         ),
     ]
@@ -301,12 +274,9 @@ async def test_get_documents_returns_document_summaries() -> None:
                 "document_id": "temp_doc_1",
                 "document_name": "HR Policy",
                 "document_version": "2026.1",
-                "retention_mode": "temporary",
                 "category": None,
-                "document_status": "active",
+                "source_uri": None,
                 "created_on": "2026-07-13T11:22:41.024965Z",
-                "modified_on": "2026-07-13T11:22:41.024965Z",
-                "expires_on": None,
             }
         ]
     }
@@ -367,11 +337,8 @@ async def test_patch_document_updates_metadata_only() -> None:
                 "document_id": "temp_doc_1",
                 "document_name": "HR Policy",
                 "document_version": "2026.1",
-                "retention_mode": "temporary",
-                "document_status": "active",
                 "chunk_index": 0,
                 "created_on": "2026-07-13T11:22:41.024965+00:00",
-                "modified_on": "2026-07-13T11:22:41.024965+00:00",
             },
         ),
     ]
@@ -397,9 +364,7 @@ async def test_patch_document_updates_metadata_only() -> None:
     assert body["document_id"] == "temp_doc_1"
     assert body["document_name"] == "HR Policy Revised"
     assert body["document_version"] == "2026.1"
-    assert body["retention_mode"] == "temporary"
-    assert body["document_status"] == "active"
-    assert body["update_status"] == "success"
+    assert body["created_on"] == "2026-07-13T11:22:41.024965Z"
     assert body["warnings"] == []
 
 

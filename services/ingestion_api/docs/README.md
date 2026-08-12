@@ -6,4 +6,4 @@ Planned docs:
 
 - [detail design](./detail-design.md)
 - [testing guide](./testing.md)
-- API notes for `POST /documents` and `POST /temporary-documents`
+- API notes for synchronous `POST /documents` ingestion

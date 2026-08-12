@@ -3,15 +3,14 @@
 ## 1. Purpose
 
 - ingest approved company documents
-- ingest larger uploaded files when they exceed the direct-context threshold
 - normalize content
 - chunk documents
+- generate embeddings through `EmbeddingsApi`
 - store source metadata
 
 ## 2. Interface Responsibilities
 
 - accept approved enterprise documents for ingestion
-- accept temporary uploaded files selected for indexed analysis
 - normalize and chunk them
 - call `EmbeddingsApi`
 - persist chunk metadata and embeddings into the vector store
@@ -27,24 +26,13 @@ Input:
 
 Output:
 
-- ingestion job or ingestion result
-
-### `POST /temporary-documents`
-
-Input:
-
-- temporary uploaded file metadata
-- content or content reference
-
-Output:
-
-- completed ingestion result for indexed file analysis
+- completed ingestion result with document, chunk, and embedding counts
 
 ### `GET /documents`
 
 Output:
 
-- document summaries filtered by `document_id`, `document_name`, or `status`
+- document summaries filtered by `document_id` or `document_name`
 
 ### `DELETE /documents/{document_id}`
 
@@ -57,4 +45,3 @@ Output:
 Output:
 
 - updated document metadata
-- explicit update status

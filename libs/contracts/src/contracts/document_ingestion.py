@@ -1,29 +1,22 @@
 from datetime import datetime
-from typing import Annotated, Any, Literal
+from typing import Annotated, Any
 
 from pydantic import BaseModel, Field, StringConstraints, model_validator
 
 NonEmptyText = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1)]
 
-DocumentRetentionMode = Literal["permanent", "temporary"]
-DocumentLifecycleStatus = Literal["active", "superseded", "deleted"]
-DocumentUpdateStatus = Literal["success", "failed"]
-
 
 class DocumentIngestionRequest(BaseModel):
-    """Request payload for creating or updating a document record."""
+    """Request payload for ingesting one document."""
 
     document_name: NonEmptyText = Field(description="Human-readable document name.")
     document_version: NonEmptyText | None = Field(
         default=None,
         description="Optional business version label for the document.",
     )
-    retention_mode: DocumentRetentionMode = Field(
-        description="Whether the document is permanent or temporary."
-    )
     category: NonEmptyText | None = Field(
         default=None,
-        description="Document category such as HR, QA, or DEV.",
+        description="Optional document category such as HR, QA, or DEV.",
     )
     content: NonEmptyText | None = Field(
         default=None,
@@ -47,51 +40,21 @@ class DocumentIngestionRequest(BaseModel):
     )
 
     @model_validator(mode="after")
-    def validate_content_source_and_category(self) -> "DocumentIngestionRequest":
-        has_content = self.content is not None
-        has_source_uri = self.source_uri is not None
-
-        if has_content == has_source_uri:
+    def validate_content_source(self) -> "DocumentIngestionRequest":
+        if (self.content is None) == (self.source_uri is None):
             raise ValueError("Provide exactly one of content or source_uri.")
-
-        if self.retention_mode == "permanent":
-            if self.category is None:
-                raise ValueError("category is required for permanent documents.")
-        elif self.category is not None:
-            raise ValueError("category must be null for temporary documents.")
-
         return self
 
 
-class DocumentIngestionAcceptedResponse(BaseModel):
-    """Response payload returned when ingestion is accepted for background processing."""
-
-    document_id: NonEmptyText = Field(description="Database-generated document identifier.")
-    document_name: NonEmptyText
-    document_version: NonEmptyText | None = None
-    retention_mode: DocumentRetentionMode
-    category: NonEmptyText | None = None
-    document_status: DocumentLifecycleStatus
-    ingestion_status: Literal["pending"]
-    created_on: datetime
-    modified_on: datetime
-    expires_on: datetime | None = None
-    warnings: list[NonEmptyText] = Field(default_factory=list)
-
-
 class DocumentIngestionResultResponse(BaseModel):
-    """Response payload returned after synchronous ingestion completes."""
+    """Response returned after synchronous ingestion completes."""
 
-    document_id: NonEmptyText = Field(description="Database-generated document identifier.")
+    document_id: NonEmptyText = Field(description="Generated document identifier.")
     document_name: NonEmptyText
     document_version: NonEmptyText | None = None
-    retention_mode: DocumentRetentionMode
     category: NonEmptyText | None = None
-    document_status: DocumentLifecycleStatus
-    ingestion_status: Literal["success", "failed"]
+    source_uri: NonEmptyText | None = None
     created_on: datetime
-    modified_on: datetime
-    expires_on: datetime | None = None
     chunk_count: int = Field(ge=0)
     embedding_count: int = Field(ge=0)
     warnings: list[NonEmptyText] = Field(default_factory=list)
@@ -102,30 +65,23 @@ class DocumentListQuery(BaseModel):
 
     document_id: NonEmptyText | None = Field(
         default=None,
-        description="Database-generated document identifier.",
+        description="Generated document identifier.",
     )
     document_name: NonEmptyText | None = Field(
         default=None,
         description="Human-readable document name.",
-    )
-    status: DocumentLifecycleStatus | None = Field(
-        default=None,
-        description="Lifecycle status filter.",
     )
 
 
 class DocumentSummaryResponse(BaseModel):
     """Summary row returned by GET /documents."""
 
-    document_id: NonEmptyText = Field(description="Database-generated document identifier.")
+    document_id: NonEmptyText = Field(description="Generated document identifier.")
     document_name: NonEmptyText
     document_version: NonEmptyText | None = None
-    retention_mode: DocumentRetentionMode
     category: NonEmptyText | None = None
-    document_status: DocumentLifecycleStatus
+    source_uri: NonEmptyText | None = None
     created_on: datetime
-    modified_on: datetime
-    expires_on: datetime | None = None
 
 
 class DocumentListResponse(BaseModel):
@@ -137,88 +93,48 @@ class DocumentListResponse(BaseModel):
 class DocumentDeleteResponse(BaseModel):
     """Response payload returned by DELETE /documents."""
 
-    document_id: NonEmptyText = Field(description="Database-generated document identifier.")
+    document_id: NonEmptyText = Field(description="Generated document identifier.")
     chunk_count: int = Field(ge=0)
     embedding_count: int = Field(ge=0)
     warnings: list[NonEmptyText] = Field(default_factory=list)
 
 
 class DocumentPatchRequest(BaseModel):
-    """Request payload for updating a single ingested document."""
+    """Request payload for updating document metadata."""
 
-    document_name: NonEmptyText | None = Field(
-        default=None,
-        description="Human-readable document name.",
-    )
-    document_version: NonEmptyText | None = Field(
-        default=None,
-        description="Optional business version label for the document.",
-    )
-    retention_mode: DocumentRetentionMode | None = Field(
-        default=None,
-        description="Whether the document is permanent or temporary.",
-    )
-    category: NonEmptyText | None = Field(
-        default=None,
-        description="Document category such as HR, QA, or DEV.",
-    )
-    content: NonEmptyText | None = Field(
-        default=None,
-        description="Direct text content to ingest.",
-    )
-    source_uri: NonEmptyText | None = Field(
-        default=None,
-        description="Reference to source content stored elsewhere.",
-    )
-    content_type: NonEmptyText | None = Field(
-        default=None,
-        description="MIME type or content type of the source document.",
-    )
-    metadata: dict[str, Any] | None = Field(
-        default=None,
-        description="Additional document metadata.",
-    )
+    document_name: NonEmptyText | None = None
+    document_version: NonEmptyText | None = None
+    category: NonEmptyText | None = None
+    content: NonEmptyText | None = None
+    source_uri: NonEmptyText | None = None
+    content_type: NonEmptyText | None = None
+    metadata: dict[str, Any] | None = None
 
     @model_validator(mode="after")
     def validate_patch_payload(self) -> "DocumentPatchRequest":
-        has_any_field = any(
-            value is not None
-            for value in (
-                self.document_name,
-                self.document_version,
-                self.retention_mode,
-                self.category,
-                self.content,
-                self.source_uri,
-                self.content_type,
-                self.metadata,
-            )
+        values = (
+            self.document_name,
+            self.document_version,
+            self.category,
+            self.content,
+            self.source_uri,
+            self.content_type,
+            self.metadata,
         )
-        if not has_any_field:
+        if all(value is None for value in values):
             raise ValueError("Provide at least one field to update.")
-
-        has_content = self.content is not None
-        has_source_uri = self.source_uri is not None
-        if has_content == has_source_uri and (has_content or has_source_uri):
-            raise ValueError("Provide exactly one of content or source_uri when updating content.")
-
-        if self.retention_mode == "permanent" and self.category is None:
-            raise ValueError("category is required when retention_mode is permanent.")
-        if self.retention_mode == "temporary" and self.category is not None:
-            raise ValueError("category must be null when retention_mode is temporary.")
-
+        if self.content is not None and self.source_uri is not None:
+            raise ValueError("Provide only one of content or source_uri when updating content.")
         return self
 
 
 class DocumentUpdateResponse(BaseModel):
     """Response payload returned by PATCH /documents/{document_id}."""
 
-    document_id: NonEmptyText = Field(description="Database-generated document identifier.")
+    document_id: NonEmptyText = Field(description="Generated document identifier.")
     document_name: NonEmptyText
     document_version: NonEmptyText | None = None
-    retention_mode: DocumentRetentionMode
     category: NonEmptyText | None = None
-    document_status: DocumentLifecycleStatus
-    update_status: DocumentUpdateStatus
-    modified_on: datetime
+    source_uri: NonEmptyText | None = None
+    created_on: datetime
     warnings: list[NonEmptyText] = Field(default_factory=list)

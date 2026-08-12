@@ -55,7 +55,6 @@ class FakeChromaClient(ChromaClient):
     ) -> list[ChromaStoredRecord]:
         if where is None:
             return self.stored_records
-
         return [
             record
             for record in self.stored_records
@@ -68,59 +67,63 @@ class FakeChromaClient(ChromaClient):
         ids: list[str] | None = None,
         where: dict[str, object] | None = None,
     ) -> None:
-        if ids is not None:
-            self.deleted_ids.extend(ids)
-            self.stored_records = [
-                record for record in self.stored_records if record.chunk_id not in ids
-            ]
+        del where
+        if ids is None:
             return
-
-        if where is not None:
-            matching_ids = [
-                record.chunk_id
-                for record in self.stored_records
-                if all(record.metadata.get(key) == value for key, value in where.items())
-            ]
-            self.deleted_ids.extend(matching_ids)
-            self.stored_records = [
-                record for record in self.stored_records if record.chunk_id not in matching_ids
-            ]
+        self.deleted_ids.extend(ids)
+        self.stored_records = [
+            record for record in self.stored_records if record.chunk_id not in ids
+        ]
 
 
-def test_ingestion_service_uses_provided_chunking_service() -> None:
-    chunking_service = ChunkingService()
-
-    service = IngestionService(chunking_service=chunking_service)
-
-    assert service.chunking_service is chunking_service
+def _stored_chunk(
+    *,
+    document_id: str = "doc_1",
+    chunk_index: int = 0,
+    document_name: str = "HR Policy",
+) -> ChromaStoredRecord:
+    return ChromaStoredRecord(
+        chunk_id=f"{document_id}:chunk:{chunk_index}",
+        document=f"chunk {chunk_index}",
+        embedding=[float(chunk_index), 0.0, 1.0],
+        metadata={
+            "document_id": document_id,
+            "document_name": document_name,
+            "document_version": "2026.1",
+            "category": "HR",
+            "source_uri": "https://example.com/hr-policy",
+            "chunk_index": chunk_index,
+            "created_on": "2026-07-13T11:22:41.024965+00:00",
+        },
+    )
 
 
 def test_ingestion_service_uses_provided_collaborators() -> None:
-    chunking_service = ChunkingService()
-    document_loader_service = DocumentLoaderService()
-    chroma_client = FakeChromaClient()
-    embeddings_client = FakeEmbeddingsApiClient()
-    normalization_service = NormalizationService()
-    chunking_profile_selector = ChunkingProfileSelector()
+    chunking = ChunkingService()
+    loader = DocumentLoaderService()
+    chroma = FakeChromaClient()
+    embeddings = FakeEmbeddingsApiClient()
+    normalization = NormalizationService()
+    selector = ChunkingProfileSelector()
 
     service = IngestionService(
-        chunking_service=chunking_service,
-        document_loader_service=document_loader_service,
-        chroma_client=chroma_client,
-        embeddings_client=embeddings_client,
-        normalization_service=normalization_service,
-        chunking_profile_selector=chunking_profile_selector,
+        chunking_service=chunking,
+        document_loader_service=loader,
+        chroma_client=chroma,
+        embeddings_client=embeddings,
+        normalization_service=normalization,
+        chunking_profile_selector=selector,
     )
 
-    assert service.chunking_service is chunking_service
-    assert service.document_loader_service is document_loader_service
-    assert service.chroma_client is chroma_client
-    assert service.embeddings_client is embeddings_client
-    assert service.normalization_service is normalization_service
-    assert service.chunking_profile_selector is chunking_profile_selector
+    assert service.chunking_service is chunking
+    assert service.document_loader_service is loader
+    assert service.chroma_client is chroma
+    assert service.embeddings_client is embeddings
+    assert service.normalization_service is normalization
+    assert service.chunking_profile_selector is selector
 
 
-def test_ingestion_service_creates_default_chunking_service() -> None:
+def test_ingestion_service_creates_default_processing_services() -> None:
     service = IngestionService()
 
     assert isinstance(service.chunking_service, ChunkingService)
@@ -130,359 +133,120 @@ def test_ingestion_service_creates_default_chunking_service() -> None:
 
 
 @pytest.mark.anyio
-async def test_ingest_permanent_document_returns_pending_response() -> None:
-    service = IngestionService()
-    payload = DocumentIngestionRequest(
-        document_name="Annual Leave Policy",
-        document_version="2026.1",
-        retention_mode="permanent",
-        category="HR",
-        content="Annual leave policy text.",
-        source_uri=None,
-        content_type="text/plain",
-        metadata={"source": "knowledge-base"},
-    )
-
-    response = await service.ingest_permanent_document(payload)
-
-    assert response.document_id.startswith("doc_")
-    assert response.document_name == "Annual Leave Policy"
-    assert response.document_version == "2026.1"
-    assert response.retention_mode == "permanent"
-    assert response.category == "HR"
-    assert response.document_status == "active"
-    assert response.ingestion_status == "pending"
-    assert response.expires_on is None
-    assert response.warnings == []
-
-
-@pytest.mark.anyio
-async def test_ingest_permanent_document_rejects_non_permanent_payload() -> None:
-    service = IngestionService()
-    payload = DocumentIngestionRequest(
-        document_name="Uploaded Benefits Form",
-        retention_mode="temporary",
-        content="raw extracted text",
-        content_type="text/plain",
-        source_uri=None,
-    )
-
-    with pytest.raises(
-        ValueError, match="Permanent ingestion requires retention_mode='permanent'."
-    ):
-        await service.ingest_permanent_document(payload)
-
-
-@pytest.mark.anyio
-async def test_ingest_temporary_document_runs_the_processing_pipeline(
-    monkeypatch,
+async def test_ingest_document_runs_pipeline_and_persists_minimal_metadata(
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    chroma_client = FakeChromaClient()
-    embeddings_client = FakeEmbeddingsApiClient()
-    service = IngestionService(
-        chroma_client=chroma_client,
-        embeddings_client=embeddings_client,
-    )
-    calls: dict[str, object] = {}
+    chroma = FakeChromaClient()
+    embeddings = FakeEmbeddingsApiClient()
+    service = IngestionService(chroma_client=chroma, embeddings_client=embeddings)
     payload = DocumentIngestionRequest(
-        document_name="Uploaded Benefits Form",
-        retention_mode="temporary",
-        content=" Raw line 1 \n\n Raw line 2 ",
+        document_name="Benefits Guide",
+        document_version="2026.1",
+        category="HR",
+        source_uri="https://example.com/benefits.txt",
         content_type="text/plain",
-        source_uri=None,
-        metadata={"source": "upload"},
     )
-
     monkeypatch.setattr(
         service.document_loader_service,
         "load_document",
-        lambda *, content, content_type, source_uri: SimpleNamespace(
-            text=content,
-            loader_name="DirectContent",
-            metadata={"content_type": content_type, "source_uri": source_uri},
-        ),
+        lambda **kwargs: SimpleNamespace(text="Benefits text", metadata=kwargs),
+    )
+    monkeypatch.setattr(
+        service.chunking_service,
+        "chunk_text",
+        lambda text, profile: ["chunk-1", "chunk-2"],
     )
 
-    def fake_normalize_text(text: str) -> str:
-        calls["normalized_input"] = text
-        return "normalized text"
+    response = await service.ingest_document(payload)
 
-    monkeypatch.setattr(service.normalization_service, "normalize_text", fake_normalize_text)
-
-    def fake_select_profile(
-        *,
-        content_type: str | None,
-        source_uri: str | None,
-        normalized_text: str,
-    ):
-        calls["profile"] = {
-            "content_type": content_type,
-            "source_uri": source_uri,
-            "normalized_text": normalized_text,
-        }
-        return SimpleNamespace(strategy="plain_text_default", chunk_size=25, chunk_overlap=5)
-
-    monkeypatch.setattr(service.chunking_profile_selector, "select_profile", fake_select_profile)
-
-    def fake_chunk_text(text: str, profile: object) -> list[str]:
-        calls["chunking"] = {"text": text, "profile": profile}
-        return ["chunk-1", "chunk-2"]
-
-    monkeypatch.setattr(service.chunking_service, "chunk_text", fake_chunk_text)
-
-    response = await service.ingest_temporary_document(payload)
-
-    assert calls["normalized_input"] == "Raw line 1 \n\n Raw line 2"
-    assert calls["profile"] == {
-        "content_type": "text/plain",
-        "source_uri": None,
-        "normalized_text": "normalized text",
-    }
-    assert calls["chunking"]["text"] == "normalized text"
-    assert embeddings_client.calls == [["chunk-1", "chunk-2"]]
-    assert len(chroma_client.calls) == 1
-    assert [record.document for record in chroma_client.calls[0]] == ["chunk-1", "chunk-2"]
-    assert [record.embedding for record in chroma_client.calls[0]] == [
-        [0.0, 0.0, 1.0],
-        [1.0, 0.0, 1.0],
-    ]
-    assert chroma_client.calls[0][0].metadata["document_name"] == "Uploaded Benefits Form"
-    assert chroma_client.calls[0][0].metadata["chunk_index"] == 0
-    assert response.document_id.startswith("temp_")
-    assert response.document_name == "Uploaded Benefits Form"
-    assert response.retention_mode == "temporary"
-    assert response.document_status == "active"
-    assert response.ingestion_status == "success"
+    assert response.document_id.startswith("doc_")
     assert response.chunk_count == 2
     assert response.embedding_count == 2
-    assert response.warnings == []
+    assert embeddings.calls == [["chunk-1", "chunk-2"]]
+    assert chroma.calls[0][0].chunk_id == f"{response.document_id}:chunk:0"
+    assert chroma.calls[0][0].metadata == {
+        "document_id": response.document_id,
+        "document_name": "Benefits Guide",
+        "document_version": "2026.1",
+        "category": "HR",
+        "source_uri": "https://example.com/benefits.txt",
+        "created_on": response.created_on.isoformat(),
+        "chunk_index": 0,
+    }
 
 
 @pytest.mark.anyio
-async def test_list_documents_returns_deduplicated_document_summaries() -> None:
-    chroma_client = FakeChromaClient()
-    chroma_client.stored_records = [
-        ChromaStoredRecord(
-            chunk_id="temp_doc_1:chunk:0",
-            document="chunk 0",
-            embedding=[0.0, 0.0, 1.0],
-            metadata={
-                "document_id": "temp_doc_1",
-                "document_name": "HR Policy",
-                "document_version": "2026.1",
-                "retention_mode": "temporary",
-                "document_status": "active",
-                "chunk_index": 0,
-                "created_on": "2026-07-13T11:22:41.024965+00:00",
-                "modified_on": "2026-07-13T11:22:41.024965+00:00",
-            },
-        ),
-        ChromaStoredRecord(
-            chunk_id="temp_doc_1:chunk:1",
-            document="chunk 1",
-            embedding=[1.0, 0.0, 1.0],
-            metadata={
-                "document_id": "temp_doc_1",
-                "document_name": "HR Policy",
-                "document_version": "2026.1",
-                "retention_mode": "temporary",
-                "document_status": "active",
-                "chunk_index": 1,
-                "created_on": "2026-07-13T11:22:41.024965+00:00",
-                "modified_on": "2026-07-13T11:22:41.024965+00:00",
-            },
-        ),
-        ChromaStoredRecord(
-            chunk_id="temp_doc_2:chunk:0",
-            document="chunk 0",
-            embedding=[2.0, 0.0, 1.0],
-            metadata={
-                "document_id": "temp_doc_2",
-                "document_name": "Benefits Guide",
-                "retention_mode": "temporary",
-                "document_status": "active",
-                "chunk_index": 0,
-                "created_on": "2026-07-14T11:22:41.024965+00:00",
-                "modified_on": "2026-07-14T11:22:41.024965+00:00",
-            },
-        ),
+async def test_list_documents_deduplicates_and_filters_by_name() -> None:
+    chroma = FakeChromaClient()
+    chroma.stored_records = [
+        _stored_chunk(chunk_index=0),
+        _stored_chunk(chunk_index=1),
+        _stored_chunk(document_id="doc_2", document_name="Benefits Guide"),
     ]
-    service = IngestionService(chroma_client=chroma_client)
+    service = IngestionService(chroma_client=chroma)
 
-    response = await service.list_documents(DocumentListQuery())
-
-    assert len(response.documents) == 2
-    assert response.documents[0].document_id == "temp_doc_1"
-    assert response.documents[0].document_name == "HR Policy"
-    assert response.documents[1].document_id == "temp_doc_2"
-    assert response.documents[1].document_name == "Benefits Guide"
-
-
-@pytest.mark.anyio
-async def test_list_documents_applies_metadata_filters() -> None:
-    chroma_client = FakeChromaClient()
-    chroma_client.stored_records = [
-        ChromaStoredRecord(
-            chunk_id="temp_doc_1:chunk:0",
-            document="chunk 0",
-            embedding=[0.0, 0.0, 1.0],
-            metadata={
-                "document_id": "temp_doc_1",
-                "document_name": "HR Policy",
-                "retention_mode": "temporary",
-                "document_status": "active",
-                "chunk_index": 0,
-                "created_on": "2026-07-13T11:22:41.024965+00:00",
-                "modified_on": "2026-07-13T11:22:41.024965+00:00",
-            },
-        ),
-        ChromaStoredRecord(
-            chunk_id="temp_doc_2:chunk:0",
-            document="chunk 0",
-            embedding=[1.0, 0.0, 1.0],
-            metadata={
-                "document_id": "temp_doc_2",
-                "document_name": "Benefits Guide",
-                "retention_mode": "temporary",
-                "document_status": "active",
-                "chunk_index": 0,
-                "created_on": "2026-07-14T11:22:41.024965+00:00",
-                "modified_on": "2026-07-14T11:22:41.024965+00:00",
-            },
-        ),
-    ]
-    service = IngestionService(chroma_client=chroma_client)
-
-    response = await service.list_documents(DocumentListQuery(document_name="Benefits Guide"))
+    response = await service.list_documents(DocumentListQuery(document_name="HR Policy"))
 
     assert len(response.documents) == 1
-    assert response.documents[0].document_id == "temp_doc_2"
+    assert response.documents[0].document_id == "doc_1"
+    assert response.documents[0].source_uri == "https://example.com/hr-policy"
 
 
 @pytest.mark.anyio
-async def test_delete_document_removes_all_chunks_for_document() -> None:
-    chroma_client = FakeChromaClient()
-    chroma_client.stored_records = [
-        ChromaStoredRecord(
-            chunk_id="temp_doc_1:chunk:0",
-            document="chunk 0",
-            embedding=[0.0, 0.0, 1.0],
-            metadata={"document_id": "temp_doc_1"},
-        ),
-        ChromaStoredRecord(
-            chunk_id="temp_doc_1:chunk:1",
-            document="chunk 1",
-            embedding=[1.0, 0.0, 1.0],
-            metadata={"document_id": "temp_doc_1"},
-        ),
-        ChromaStoredRecord(
-            chunk_id="temp_doc_2:chunk:0",
-            document="chunk 0",
-            embedding=[2.0, 0.0, 1.0],
-            metadata={"document_id": "temp_doc_2"},
-        ),
+async def test_delete_document_removes_all_document_chunks() -> None:
+    chroma = FakeChromaClient()
+    chroma.stored_records = [
+        _stored_chunk(chunk_index=0),
+        _stored_chunk(chunk_index=1),
+        _stored_chunk(document_id="doc_2"),
     ]
-    service = IngestionService(chroma_client=chroma_client)
+    service = IngestionService(chroma_client=chroma)
 
-    response = await service.delete_document("temp_doc_1")
+    response = await service.delete_document("doc_1")
 
-    assert response.document_id == "temp_doc_1"
     assert response.chunk_count == 2
     assert response.embedding_count == 2
-    assert chroma_client.deleted_ids == ["temp_doc_1:chunk:0", "temp_doc_1:chunk:1"]
-    assert [record.chunk_id for record in chroma_client.stored_records] == ["temp_doc_2:chunk:0"]
+    assert chroma.deleted_ids == ["doc_1:chunk:0", "doc_1:chunk:1"]
 
 
 @pytest.mark.anyio
-async def test_update_document_rewrites_chunk_metadata_only() -> None:
-    chroma_client = FakeChromaClient()
-    chroma_client.stored_records = [
-        ChromaStoredRecord(
-            chunk_id="temp_doc_1:chunk:0",
-            document="chunk 0",
-            embedding=[0.0, 0.0, 1.0],
-            metadata={
-                "document_id": "temp_doc_1",
-                "document_name": "HR Policy",
-                "document_version": "2026.1",
-                "retention_mode": "temporary",
-                "document_status": "active",
-                "chunk_index": 0,
-                "created_on": "2026-07-13T11:22:41.024965+00:00",
-                "modified_on": "2026-07-13T11:22:41.024965+00:00",
-            },
-        ),
-        ChromaStoredRecord(
-            chunk_id="temp_doc_1:chunk:1",
-            document="chunk 1",
-            embedding=[1.0, 0.0, 1.0],
-            metadata={
-                "document_id": "temp_doc_1",
-                "document_name": "HR Policy",
-                "document_version": "2026.1",
-                "retention_mode": "temporary",
-                "document_status": "active",
-                "chunk_index": 1,
-                "created_on": "2026-07-13T11:22:41.024965+00:00",
-                "modified_on": "2026-07-13T11:22:41.024965+00:00",
-            },
-        ),
-    ]
-    service = IngestionService(chroma_client=chroma_client)
+async def test_update_document_rewrites_only_retained_metadata() -> None:
+    chroma = FakeChromaClient()
+    chroma.stored_records = [_stored_chunk(chunk_index=0), _stored_chunk(chunk_index=1)]
+    service = IngestionService(chroma_client=chroma)
 
     response = await service.update_document(
-        "temp_doc_1",
+        "doc_1",
         DocumentPatchRequest(document_name="HR Policy Revised", document_version="2026.2"),
     )
 
-    assert response.document_id == "temp_doc_1"
     assert response.document_name == "HR Policy Revised"
     assert response.document_version == "2026.2"
-    assert response.retention_mode == "temporary"
-    assert response.update_status == "success"
-    assert len(chroma_client.calls) == 1
-    assert [record.document for record in chroma_client.calls[0]] == ["chunk 0", "chunk 1"]
-    assert [record.embedding for record in chroma_client.calls[0]] == [
-        [0.0, 0.0, 1.0],
-        [1.0, 0.0, 1.0],
-    ]
-    assert chroma_client.calls[0][0].metadata["document_name"] == "HR Policy Revised"
-    assert chroma_client.calls[0][0].metadata["document_version"] == "2026.2"
-    assert chroma_client.calls[0][0].metadata["chunk_index"] == 0
-    assert chroma_client.calls[0][0].metadata["modified_on"] != "2026-07-13T11:22:41.024965+00:00"
+    assert chroma.calls[0][0].metadata == {
+        "document_id": "doc_1",
+        "document_name": "HR Policy Revised",
+        "document_version": "2026.2",
+        "category": "HR",
+        "source_uri": "https://example.com/hr-policy",
+        "created_on": "2026-07-13T11:22:41.024965+00:00",
+        "chunk_index": 0,
+    }
 
 
 @pytest.mark.anyio
 async def test_update_document_rejects_content_changes() -> None:
     service = IngestionService(chroma_client=FakeChromaClient())
 
-    with pytest.raises(
-        ValueError,
-        match=(
-            "PATCH /documents supports metadata-only updates. "
-            "Reingest the document to change content."
-        ),
-    ):
-        await service.update_document(
-            "temp_doc_1",
-            DocumentPatchRequest(content="replacement content"),
-        )
+    with pytest.raises(ValueError, match="metadata-only updates"):
+        await service.update_document("doc_1", DocumentPatchRequest(content="new content"))
 
 
 @pytest.mark.anyio
-async def test_ingest_temporary_document_rejects_non_temporary_payload() -> None:
-    service = IngestionService()
-    payload = DocumentIngestionRequest(
-        document_name="Annual Leave Policy",
-        document_version="2026.1",
-        retention_mode="permanent",
-        category="HR",
-        content="policy text",
-        content_type="text/plain",
-        source_uri=None,
-    )
+async def test_update_document_rejects_unknown_document() -> None:
+    service = IngestionService(chroma_client=FakeChromaClient())
 
-    with pytest.raises(
-        ValueError, match="Temporary ingestion requires retention_mode='temporary'."
-    ):
-        await service.ingest_temporary_document(payload)
+    with pytest.raises(LookupError, match="Document 'doc_1' was not found"):
+        await service.update_document(
+            "doc_1",
+            DocumentPatchRequest(document_name="Unknown"),
+        )

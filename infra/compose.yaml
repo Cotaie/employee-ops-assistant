@@ -50,8 +50,10 @@ services:
       SERVICE_NAME: ingestion-api
       SERVICE_VERSION: docker
       EMBEDDINGS_API_URL: http://embeddings-api:8000
+      EMBEDDINGS_API_TIMEOUT_SECONDS: "300"
       CHROMA_HOST: chroma
       CHROMA_PORT: "8000"
+      CHROMA_COLLECTION_NAME: ingested_documents_v2
 
   retrieve-api:
     build:
@@ -66,8 +68,10 @@ services:
       SERVICE_NAME: retrieve-api
       SERVICE_VERSION: docker
       EMBEDDINGS_API_URL: http://embeddings-api:8000
+      EMBEDDINGS_API_TIMEOUT_SECONDS: "300"
       CHROMA_HOST: chroma
       CHROMA_PORT: "8000"
+      CHROMA_COLLECTION_NAME: ingested_documents_v2
 
   agent-api:
     build:

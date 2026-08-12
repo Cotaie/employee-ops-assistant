@@ -15,4 +15,5 @@ services/embeddings_api/.env
 services/ingestion_api/.env
 services/agent_api/.env
 infra/oauth2-proxy/.env
+data/documents/
 future_improvements.md

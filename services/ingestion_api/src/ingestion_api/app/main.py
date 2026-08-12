@@ -27,7 +27,10 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         chroma_client=ChromaClient(
             collection=chroma_collection,
         ),
-        embeddings_client=EmbeddingsApiClient(app.state.settings.embeddings_api_url),
+        embeddings_client=EmbeddingsApiClient(
+            app.state.settings.embeddings_api_url,
+            timeout_seconds=app.state.settings.embeddings_api_timeout_seconds,
+        ),
     )
     yield
 

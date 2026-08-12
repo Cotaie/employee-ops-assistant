@@ -21,7 +21,12 @@ class FakeRetrievalService:
                 "distance": 0.12,
                 "metadata": {
                     "document_id": "annual-leave-policy",
+                    "document_name": "Annual Leave Policy",
+                    "document_version": "2026.1",
                     "category": "HR",
+                    "chunk_index": 0,
+                    "created_on": "2026-08-11T10:00:00+00:00",
+                    "source_uri": "https://example.com/annual-leave-policy",
                 },
             }
         ]
@@ -103,7 +108,12 @@ async def test_retrieve_returns_ranked_chunks() -> None:
                 "distance": 0.12,
                 "metadata": {
                     "document_id": "annual-leave-policy",
+                    "document_name": "Annual Leave Policy",
+                    "document_version": "2026.1",
                     "category": "HR",
+                    "chunk_index": 0,
+                    "created_on": "2026-08-11T10:00:00+00:00",
+                    "source_uri": "https://example.com/annual-leave-policy",
                 },
             }
         ],

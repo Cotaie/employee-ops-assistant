@@ -17,6 +17,11 @@ class Settings(BaseSettings):
         default="http://localhost:8000",
         alias="EMBEDDINGS_API_URL",
     )
+    embeddings_api_timeout_seconds: float = Field(
+        default=300.0,
+        alias="EMBEDDINGS_API_TIMEOUT_SECONDS",
+        gt=0,
+    )
     chroma_host: str = Field(default="localhost", alias="CHROMA_HOST")
     chroma_port: int = Field(default=8002, alias="CHROMA_PORT")
     chroma_collection_name: str = Field(

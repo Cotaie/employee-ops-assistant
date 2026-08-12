@@ -24,7 +24,10 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
         metadata={"hnsw:space": "cosine"},
     )
     app.state.retrieval_service = RetrievalService(
-        embeddings_client=EmbeddingsApiClient(app.state.settings.embeddings_api_url),
+        embeddings_client=EmbeddingsApiClient(
+            app.state.settings.embeddings_api_url,
+            timeout_seconds=app.state.settings.embeddings_api_timeout_seconds,
+        ),
         chunk_store=ChromaClient(collection=chroma_collection),
     )
     yield

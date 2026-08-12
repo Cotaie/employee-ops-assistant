@@ -73,10 +73,8 @@ class DocumentManagementServiceMixin(IngestionServiceBase):
             document_id=document.document_id,
             document_name=document.document_name,
             document_version=document.document_version,
-            retention_mode=document.retention_mode,
             category=document.category,
-            document_status=document.document_status,
-            update_status="success",
-            modified_on=document.modified_on,
+            source_uri=document.source_uri,
+            created_on=document.created_on,
             warnings=document.warnings,
         )

@@ -2,279 +2,72 @@
 
 ## 1. Purpose
 
-`IngestionApi` owns document intake for the employee assistant. It covers both:
+`IngestionApi` prepares documents for semantic retrieval. It loads and
+normalizes content, splits it into chunks, requests vectors from
+`EmbeddingsApi`, and stores the chunks and their provenance in Chroma.
 
-- permanent ingestion of approved enterprise documents
-- temporary ingestion of uploaded user documents that may later be deleted
+The service uses a vector-database-only design. It does not persist a separate
+parent document row; a logical document is reconstructed by grouping Chroma
+records on `document_id`.
 
-The service is responsible for preparing content for semantic retrieval by normalizing it, chunking it, generating embeddings through `EmbeddingsApi`, and persisting the results together with document metadata.
+## 2. Stored data
 
-The current implementation uses a vector-DB-only approach. Chroma stores:
-
-- chunk text
-- embedding vectors
-- document-level metadata duplicated onto each chunk record
-
-## 2. Core Design Goals
-
-- support both permanent and temporary document ingestion
-- keep document lifecycle metadata queryable in the vector database
-- allow later modification, deletion, and cleanup of ingested content
-- ensure all derived chunk and embedding records follow the parent document lifecycle
-- keep the first implementation thin by avoiding a separate SQL document store
-
-## 3. Document Lifecycle Model
-
-The current implementation does not persist a separate parent document row.
-
-Instead, document lifecycle metadata is projected onto every chunk stored in Chroma. A logical document is reconstructed by grouping chunk records on `document_id`.
-
-### 3.1 Logical document record
-
-Each logical document still has a stable identifier and lifecycle metadata:
+Each logical document has:
 
 - `document_id`
-- `document_version`
 - `document_name`
-- `retention_mode`
-- `document_status`
-- `created_on`
-- `modified_on`
+- optional `document_version`
 - optional `category`
+- optional `source_uri`
+- `created_on`
 
-These values are stored as Chroma metadata on each chunk.
+Each Chroma record contains:
 
-Current meanings:
+- an ID formatted as `{document_id}:chunk:{chunk_index}`
+- the chunk text in Chroma's document field
+- the embedding vector
+- `chunk_index` and the document fields above as metadata
 
-- `retention_mode`
-  - `permanent`
-  - `temporary`
-- `document_status`
-  - `active`
-  - `superseded`
-  - `deleted`
+Deleting a logical document removes every Chroma record with its
+`document_id`.
 
-### 3.2 Chunk records
+## 3. API surface
 
-Chunk records belong to the logical document and inherit its lifecycle.
+### `POST /documents`
 
-Each chunk stores:
+Ingests one document synchronously and returns `201 Created` after its chunks
+and embeddings have been stored.
 
-- `chunk_id`
-- `document_id`
-- `chunk_index`
-- `chunk_text`
-- embedding vector
-- duplicated document metadata needed for listing and lifecycle operations
+The request must provide exactly one of direct `content` or `source_uri`.
 
-Chunk rows can be removed as a group when a document is deleted.
+Processing steps:
 
-## 4. API Surface
-
-The endpoint set discussed for this service is:
-
-- `POST /documents`
-- `POST /temporary-documents`
-- `GET /documents`
-- `DELETE /documents/{document_id}`
-- `PATCH /documents/{document_id}`
-
-### 4.1 `POST /documents`
-
-Purpose:
-
-- ingest a document into the knowledge base as permanent data
-- process the request asynchronously
-
-Current status:
-
-- implemented as an accepted/pending route only
-- returns a generated `document_id`
-- does not yet persist chunks or embeddings
-
-Design intent for the later permanent flow:
-
-1. accept document metadata and content or a content reference
-2. create a logical document with `ingestion_status = pending`
-3. normalize the content
+1. load the supplied content
+2. normalize it
+3. select a chunking profile
 4. split it into chunks
 5. call `EmbeddingsApi`
-6. persist chunks, embeddings, and duplicated metadata in Chroma
-7. return or later expose final ingestion status
+6. persist the chunks, vectors, and metadata in Chroma
+7. return the document ID and stored record counts
 
-### 4.2 `POST /temporary-documents`
+### `GET /documents`
 
-Purpose:
+Lists logical documents reconstructed from Chroma. Results may be filtered by
+`document_id` or `document_name`.
 
-- ingest a temporary user document
-- complete processing synchronously so the caller can use the data immediately
+### `DELETE /documents/{document_id}`
 
-Expected behavior:
+Deletes all chunks and embeddings belonging to the document and returns the
+deleted record counts.
 
-1. accept the same request contract as `POST /documents`
-2. validate that `retention_mode = temporary`
-3. normalize the content
-4. split it into chunks
-5. call `EmbeddingsApi`
-6. build chunk records with duplicated document metadata
-7. store chunk text, embeddings, and metadata in Chroma
-8. return a completed success or failure response
+### `PATCH /documents/{document_id}`
 
-Current implementation details:
+Updates document metadata while preserving existing chunk text and vectors.
+Changing content, `source_uri`, or `content_type` is rejected because it
+requires reingestion and new embeddings.
 
-- content can come from direct `content` or `source_uri`
-- normalization runs before chunking
-- chunking profile selection happens before splitting
-- embeddings are generated by `EmbeddingsApi`
-- successful responses include `chunk_count` and `embedding_count`
+## 4. Service integrations
 
-### 4.3 `GET /documents`
-
-Purpose:
-
-- list documents or filter the document set
-
-Supported filters:
-
-- `document_id`
-- `document_name`
-- `status`
-
-Current implementation details:
-
-- reads chunk records from Chroma using metadata filters
-- groups rows by `document_id`
-- returns one summary row per document
-- reconstructs `created_on` and `modified_on` from stored metadata
-
-This is currently the document-management read path for vector-DB-only persistence.
-
-### 4.4 `DELETE /documents/{document_id}`
-
-Purpose:
-
-- delete a document and all related chunks and embeddings
-
-Expected path parameter:
-
-- `document_id`
-
-Deletion must remove:
-
-- all chunk records linked to the document
-- all embedding vectors linked to the document
-
-Temporary documents should also be eligible for automated cleanup through this same deletion path.
-
-Current implementation details:
-
-- queries Chroma by `document_id`
-- deletes matching chunk IDs
-- returns `chunk_count` and `embedding_count` based on deleted rows
-
-### 4.5 `PATCH /documents/{document_id}`
-
-Purpose:
-
-- modify an existing document
-
-Current implementation is intentionally limited to metadata-only updates.
-
-Supported updates:
-
-- target one document by `document_id`
-- update document metadata
-- update `modified_on`
-- preserve existing chunk text
-- preserve existing embeddings
-- return an explicit update status
-
-Rejected through this route:
-
-- `content`
-- `source_uri`
-- `content_type`
-
-Reason for the restriction:
-
-- changing content requires rechunking and regenerating embeddings
-- the current route is meant only for document-management metadata
-- content replacement should happen through delete plus reingest, or a future explicit reindex flow
-
-Current implementation details:
-
-1. fetch all chunks for the `document_id` from Chroma
-2. validate the request contains metadata-only changes
-3. rebuild logical document metadata with a new `modified_on`
-4. re-upsert the same chunks and embeddings with updated metadata
-5. return a success response
-
-## 5. Retention and Cleanup
-
-Temporary documents are expected to be cleaned up eventually, even if the normal request flow fails.
-
-Cleanup sources:
-
-- explicit delete request from the agent or API
-- background worker retry
-- scheduled daily cleanup job
-
-Cleanup must remove:
-
-- all related chunk records in Chroma
-- all associated embeddings and vector-store entries
-
-Permanent documents do not participate in the temporary cleanup workflow unless they are explicitly deleted or superseded.
-
-## 6. Query and Mutation Semantics
-
-The document name is a human-readable field and should not be treated as the only stable identifier.
-
-Recommended identity rules:
-
-- use `document_id` as the primary lookup key
-- allow `document_name` and `status` as secondary filters
-- keep `modified_on` in chunk metadata
-- keep lifecycle updates explicit in Chroma metadata
-
-This makes it possible to:
-
-- find a specific document by ID
-- list all documents with a given status
-- delete all chunks for a matching document ID
-- update document metadata and record when it changed
-
-## 7. Integration Points
-
-`IngestionApi` depends on:
-
-- `EmbeddingsApi` for vector generation
-- the vector store layer, expected to be Chroma
-
-The service does not own retrieval. Retrieval of indexed content belongs to `RetrievalApi`.
-
-## 8. Error Handling
-
-Expected error categories:
-
-- invalid payload or missing required fields
-- unsupported document type or source reference
-- embedding generation failure
-- vector-store write failure
-- cleanup or delete failure
-
-Error handling should preserve the parent document status so failed ingest or delete operations can be retried safely.
-
-In the current vector-DB-only implementation, failures happen around chunk persistence and metadata rewrites rather than around separate parent-row state transitions.
-
-## 9. Current Gaps And Open Design Choices
-
-The following details are still open or only partially implemented:
-
-- whether permanent ingestion should stay asynchronous or become a real background workflow
-- how temporary expiration timestamps are assigned
-- whether Chroma-only persistence remains sufficient or a hybrid SQL plus vector-store model is needed later
-- whether metadata updates should eventually support explicit status transitions such as `superseded`
-- whether a dedicated reindex endpoint is needed for content replacement
-
-These choices should be finalized before broader document-management features are added.
+- `EmbeddingsApi` generates one vector for each chunk.
+- Chroma stores chunk text, vectors, and document provenance.
+- `RetrieveApi` queries the same Chroma collection for semantic retrieval.

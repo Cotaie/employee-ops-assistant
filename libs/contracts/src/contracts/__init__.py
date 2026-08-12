@@ -4,7 +4,6 @@ from contracts.agent import ChatRequest
 from contracts.approval import ApprovalRequest
 from contracts.document_ingestion import (
     DocumentDeleteResponse,
-    DocumentIngestionAcceptedResponse,
     DocumentIngestionRequest,
     DocumentIngestionResultResponse,
     DocumentListQuery,
@@ -22,7 +21,6 @@ from contracts.threads import ThreadResponse
 __all__ = [
     "ChatRequest",
     "ApprovalRequest",
-    "DocumentIngestionAcceptedResponse",
     "DocumentIngestionRequest",
     "DocumentIngestionResultResponse",
     "DocumentDeleteResponse",

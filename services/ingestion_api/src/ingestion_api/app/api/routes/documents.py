@@ -2,10 +2,8 @@ from typing import Annotated
 
 from contracts.document_ingestion import (
     DocumentDeleteResponse,
-    DocumentIngestionAcceptedResponse,
     DocumentIngestionRequest,
     DocumentIngestionResultResponse,
-    DocumentLifecycleStatus,
     DocumentListQuery,
     DocumentListResponse,
     DocumentPatchRequest,
@@ -23,10 +21,6 @@ IngestionServiceDependency = Annotated[
 ]
 DocumentIdQuery = Annotated[str | None, Query()]
 DocumentNameQuery = Annotated[str | None, Query()]
-DocumentStatusQuery = Annotated[
-    DocumentLifecycleStatus | None,
-    Query(alias="status"),
-]
 
 
 def _not_implemented(detail: str) -> HTTPException:
@@ -35,26 +29,15 @@ def _not_implemented(detail: str) -> HTTPException:
 
 @router.post(
     "/documents",
-    response_model=DocumentIngestionAcceptedResponse,
-    status_code=status.HTTP_202_ACCEPTED,
+    response_model=DocumentIngestionResultResponse,
+    status_code=status.HTTP_201_CREATED,
 )
 async def create_document(
     payload: DocumentIngestionRequest,
     service: IngestionServiceDependency,
-) -> DocumentIngestionAcceptedResponse:
-    try:
-        return await service.ingest_permanent_document(payload)
-    except NotImplementedError as exc:
-        raise _not_implemented(str(exc)) from exc
-
-
-@router.post("/temporary-documents", response_model=DocumentIngestionResultResponse)
-async def create_temporary_document(
-    payload: DocumentIngestionRequest,
-    service: IngestionServiceDependency,
 ) -> DocumentIngestionResultResponse:
     try:
-        return await service.ingest_temporary_document(payload)
+        return await service.ingest_document(payload)
     except NotImplementedError as exc:
         raise _not_implemented(str(exc)) from exc
 
@@ -64,12 +47,10 @@ async def list_documents(
     service: IngestionServiceDependency,
     document_id: DocumentIdQuery = None,
     document_name: DocumentNameQuery = None,
-    status_filter: DocumentStatusQuery = None,
 ) -> DocumentListResponse:
     filters = DocumentListQuery(
         document_id=document_id,
         document_name=document_name,
-        status=status_filter,
     )
     try:
         return await service.list_documents(filters)

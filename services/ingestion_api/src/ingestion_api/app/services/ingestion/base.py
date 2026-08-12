@@ -1,14 +1,12 @@
 from dataclasses import dataclass, field
-from datetime import UTC, datetime
+from datetime import datetime
 
 from clients.chroma import ChromaChunkRecord, ChromaClient, ChromaStoredRecord
 from clients.embeddings_api import EmbeddingsApiClient
 from contracts import EmbeddingsResponse
 from contracts.document_ingestion import (
-    DocumentLifecycleStatus,
     DocumentListQuery,
     DocumentPatchRequest,
-    DocumentRetentionMode,
     DocumentSummaryResponse,
 )
 
@@ -23,12 +21,9 @@ class StoredDocument:
     document_id: str
     document_name: str
     document_version: str | None
-    retention_mode: DocumentRetentionMode
     category: str | None
-    document_status: DocumentLifecycleStatus
+    source_uri: str | None
     created_on: datetime
-    modified_on: datetime
-    expires_on: datetime | None
     chunk_count: int = 0
     embedding_count: int = 0
     warnings: list[str] = field(default_factory=list)
@@ -128,26 +123,16 @@ class IngestionServiceBase:
         records: list[ChromaStoredRecord],
     ) -> StoredDocument:
         metadata = records[0].metadata
-        now = datetime.now(UTC)
-
-        retention_mode = payload.retention_mode or metadata["retention_mode"]
         category = payload.category if payload.category is not None else metadata.get("category")
-        if retention_mode == "permanent" and category is None:
-            raise ValueError("category is required when retention_mode is permanent.")
-        if retention_mode == "temporary" and category is not None:
-            raise ValueError("category must be null when retention_mode is temporary.")
 
         created_on = datetime.fromisoformat(metadata["created_on"])
         return StoredDocument(
             document_id=document_id,
             document_name=payload.document_name or metadata["document_name"],
             document_version=payload.document_version or metadata.get("document_version"),
-            retention_mode=retention_mode,
             category=category,
-            document_status=metadata["document_status"],
+            source_uri=metadata.get("source_uri"),
             created_on=created_on,
-            modified_on=now,
-            expires_on=None,
             chunk_count=len(records),
             embedding_count=sum(1 for record in records if record.embedding is not None),
         )
@@ -188,11 +173,9 @@ class IngestionServiceBase:
             "document_id": document.document_id,
             "document_name": document.document_name,
             "document_version": document.document_version,
-            "retention_mode": document.retention_mode,
             "category": document.category,
-            "document_status": document.document_status,
+            "source_uri": document.source_uri,
             "created_on": document.created_on.isoformat(),
-            "modified_on": document.modified_on.isoformat(),
         }
         return {key: value for key, value in metadata.items() if value is not None}
 
@@ -203,8 +186,6 @@ class IngestionServiceBase:
             where["document_id"] = filters.document_id
         if filters.document_name is not None:
             where["document_name"] = filters.document_name
-        if filters.status is not None:
-            where["document_status"] = filters.status
 
         return where or None
 
@@ -220,16 +201,14 @@ class IngestionServiceBase:
             if document_id in documents_by_id:
                 continue
 
+            created_on = datetime.fromisoformat(metadata["created_on"])
             documents_by_id[document_id] = DocumentSummaryResponse(
                 document_id=document_id,
                 document_name=metadata["document_name"],
                 document_version=metadata.get("document_version"),
-                retention_mode=metadata["retention_mode"],
                 category=metadata.get("category"),
-                document_status=metadata["document_status"],
-                created_on=datetime.fromisoformat(metadata["created_on"]),
-                modified_on=datetime.fromisoformat(metadata["modified_on"]),
-                expires_on=None,
+                source_uri=metadata.get("source_uri"),
+                created_on=created_on,
             )
 
         return sorted(documents_by_id.values(), key=lambda document: document.created_on)
