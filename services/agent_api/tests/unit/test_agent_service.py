@@ -46,3 +46,6 @@ def test_build_agent_configures_tools_hitl_and_checkpointer(
     assert hitl.interrupt_on["web_search"] == {
         "allowed_decisions": ["approve", "reject"],
     }
+    assert hitl.interrupt_on["retrieve_knowledge"] == {
+        "allowed_decisions": ["approve", "reject"],
+    }

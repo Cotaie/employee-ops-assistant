@@ -29,6 +29,7 @@ def redis_checkpointer(monkeypatch: pytest.MonkeyPatch) -> AsyncMock:
         "from_conn_string",
         from_conn_string,
     )
+    monkeypatch.setattr(main, "create_retrieval_tools", lambda client: [])
     return checkpointer
 
 
@@ -152,6 +153,50 @@ async def test_lifespan_composes_tavily_tools_into_agent(
     app = FastAPI()
     async with main.lifespan(app):
         assert app.state.agent is agent
+
+
+@pytest.mark.anyio
+async def test_lifespan_composes_retrieval_tool_into_agent(
+    monkeypatch: pytest.MonkeyPatch,
+    redis_checkpointer: AsyncMock,
+) -> None:
+    settings = Settings(
+        _env_file=None,
+        RETRIEVE_API_URL="http://retrieve-api:8000",
+        RETRIEVE_API_TIMEOUT_SECONDS=120,
+    )
+    tools: list[Any] = [object()]
+    model = object()
+    agent = object()
+    captured_client: dict[str, object] = {}
+
+    class FakeRetrieveApiClient:
+        def __init__(self, base_url: str, timeout_seconds: float) -> None:
+            captured_client["base_url"] = base_url
+            captured_client["timeout_seconds"] = timeout_seconds
+
+    monkeypatch.setattr(main, "get_settings", lambda: settings)
+    monkeypatch.setattr(main, "RetrieveApiClient", FakeRetrieveApiClient)
+    monkeypatch.setattr(main, "create_retrieval_tools", lambda client: tools)
+    monkeypatch.setattr(main, "create_chat_model", lambda value: model)
+    monkeypatch.setattr(
+        main,
+        "build_agent",
+        lambda value, configured_tools, checkpointer: (
+            agent
+            if value is model and configured_tools == tools and checkpointer is redis_checkpointer
+            else None
+        ),
+    )
+
+    app = FastAPI()
+    async with main.lifespan(app):
+        assert app.state.agent is agent
+
+    assert captured_client == {
+        "base_url": "http://retrieve-api:8000",
+        "timeout_seconds": 120.0,
+    }
 
 
 @pytest.mark.anyio

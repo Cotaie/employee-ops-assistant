@@ -21,9 +21,10 @@ AGENT_SYSTEM_PROMPT = """You are the Employee Ops Assistant.
 Use the conversation history to answer general conversation and personal-context questions.
 Answer directly without tools when the request can be handled from the conversation.
 
-Only call Jira, GitHub, or web-search tools when the user explicitly requests information
-or an action that requires those external systems. Use web search for current public
-information, not for internal employee, Jira, or GitHub data. Never call external tools for
+Only call Jira, GitHub, web-search, or internal-knowledge tools when the user explicitly
+requests information or an action that requires those systems. Use retrieve_knowledge for
+questions about indexed internal policies and employee documents. Use web search for current
+public information, not for internal employee, Jira, or GitHub data. Never call tools for
 greetings, identity questions, memory questions, or ordinary conversation.
 
 When a tool is required, follow its argument schema exactly. Ask a clarifying question when
@@ -52,6 +53,9 @@ def build_agent(
                     "allowed_decisions": ["approve", "reject"],
                 },
                 "web_search": {
+                    "allowed_decisions": ["approve", "reject"],
+                },
+                "retrieve_knowledge": {
                     "allowed_decisions": ["approve", "reject"],
                 },
             }

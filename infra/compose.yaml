@@ -82,6 +82,8 @@ services:
     depends_on:
       redis:
         condition: service_healthy
+      retrieve-api:
+        condition: service_started
     env_file:
       - ../services/agent_api/.env
     environment:
@@ -90,6 +92,8 @@ services:
       OLLAMA_BASE_URL: http://host.docker.internal:11434
       REDIS_URL: redis://redis:6379
       CHECKPOINT_TTL_MINUTES: "1440"
+      RETRIEVE_API_URL: http://retrieve-api:8000
+      RETRIEVE_API_TIMEOUT_SECONDS: "300"
     extra_hosts:
       - "host.docker.internal:host-gateway"
 

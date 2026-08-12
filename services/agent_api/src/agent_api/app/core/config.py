@@ -20,6 +20,15 @@ class Settings(BaseSettings):
     github_api_token: SecretStr | None = Field(default=None, alias="GITHUB_API_TOKEN")
     github_repository: str | None = Field(default=None, alias="GITHUB_REPOSITORY")
     tavily_api_key: SecretStr | None = Field(default=None, alias="TAVILY_API_KEY")
+    retrieve_api_url: str = Field(
+        default="http://localhost:8004",
+        alias="RETRIEVE_API_URL",
+    )
+    retrieve_api_timeout_seconds: float = Field(
+        default=300.0,
+        alias="RETRIEVE_API_TIMEOUT_SECONDS",
+        gt=0,
+    )
     llm_api_key: SecretStr | None = Field(default=None, alias="LLM_API_KEY")
     llm_model: str = Field(default="openai:gpt-5.4-mini", alias="LLM_MODEL")
     llm_timeout_seconds: float = Field(default=300, alias="LLM_TIMEOUT_SECONDS", gt=0)
