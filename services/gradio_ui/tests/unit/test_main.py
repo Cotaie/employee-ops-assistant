@@ -4,7 +4,12 @@ import httpx
 import pytest
 
 from gradio_ui.agent_api import AgentResponse, AgentStreamEvent
-from gradio_ui.main import _resolve_approval, _retry_message, _send_message
+from gradio_ui.main import (
+    _resolve_approval,
+    _resolve_approval_flow,
+    _retry_message,
+    _send_message,
+)
 
 
 class FakeAgentApiClient:
@@ -97,6 +102,20 @@ async def test_send_message_creates_thread_and_displays_response() -> None:
 
 
 @pytest.mark.anyio
+async def test_send_message_disables_submission_controls_while_streaming() -> None:
+    client = FakeAgentApiClient()
+
+    results = [result async for result in _send_message("hello", [], None, client)]
+
+    assert results[0].message_input["interactive"] is False
+    assert results[0].send_button["interactive"] is False
+    assert results[1].message_input["interactive"] is False
+    assert results[1].send_button["interactive"] is False
+    assert results[-1].message_input["interactive"] is True
+    assert results[-1].send_button["interactive"] is True
+
+
+@pytest.mark.anyio
 async def test_retry_reuses_message_id_after_agent_api_failure() -> None:
     client = FakeAgentApiClient()
     client.fail_next_message = True
@@ -163,3 +182,30 @@ async def test_approval_request_can_be_rejected() -> None:
     assert client.approval_calls == [("thread-1", "interrupt-1", False)]
     assert result.pending_approval is None
     assert result.history[-1] == {"role": "assistant", "content": "Tool request denied."}
+
+
+@pytest.mark.anyio
+async def test_approval_flow_disables_decision_controls_while_resolving() -> None:
+    client = FakeAgentApiClient()
+    approval: dict[str, Any] = {
+        "interrupt_id": "interrupt-1",
+        "action_requests": [{"name": "retrieve_knowledge", "args": {}}],
+    }
+
+    results = [
+        result
+        async for result in _resolve_approval_flow(
+            approved=True,
+            history=[],
+            thread_id="thread-1",
+            pending_approval=approval,
+            client=client,
+        )
+    ]
+
+    assert results[0].approve_button["visible"] is True
+    assert results[0].approve_button["interactive"] is False
+    assert results[0].reject_button["interactive"] is False
+    assert results[0].status == "Resolving approval..."
+    assert results[-1].pending_approval is None
+    assert client.approval_calls == [("thread-1", "interrupt-1", True)]

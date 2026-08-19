@@ -42,6 +42,7 @@ class AgentApi(Protocol):
 
 class UiResult(NamedTuple):
     message_input: ComponentUpdate
+    send_button: ComponentUpdate
     history: ChatHistory
     thread_id: str | None
     pending_message: PendingMessage | None
@@ -85,14 +86,17 @@ def _ui_result(
     pending_message: PendingMessage | None,
     pending_approval: PendingApproval | None,
     status: str = "",
+    *,
+    busy: bool = False,
 ) -> UiResult:
     approval_required = pending_approval is not None
     retry_required = pending_message is not None
     return UiResult(
         message_input=_update(
             value="",
-            interactive=not approval_required and not retry_required,
+            interactive=not busy and not approval_required and not retry_required,
         ),
+        send_button=_update(interactive=not busy and not approval_required and not retry_required),
         history=history,
         thread_id=thread_id,
         pending_message=pending_message,
@@ -101,9 +105,9 @@ def _ui_result(
             value=pending_approval,
             visible=approval_required,
         ),
-        retry_button=_update(visible=retry_required),
-        approve_button=_update(visible=approval_required),
-        reject_button=_update(visible=approval_required),
+        retry_button=_update(visible=retry_required, interactive=not busy),
+        approve_button=_update(visible=approval_required, interactive=not busy),
+        reject_button=_update(visible=approval_required, interactive=not busy),
         status=status,
     )
 
@@ -169,6 +173,7 @@ async def _deliver_message(
                     None,
                     None,
                     "Generating...",
+                    busy=True,
                 )
                 continue
 
@@ -181,6 +186,7 @@ async def _deliver_message(
                     None,
                     None,
                     f"Tool activity: {tool} {phase}.",
+                    busy=True,
                 )
                 continue
 
@@ -264,7 +270,7 @@ async def _send_message(
         "message": clean_message,
     }
     current_history.append({"role": "user", "content": clean_message})
-    yield _ui_result(current_history, thread_id, None, None, "Generating...")
+    yield _ui_result(current_history, thread_id, None, None, "Generating...", busy=True)
     async for result in _deliver_message(
         current_history,
         thread_id,
@@ -284,7 +290,7 @@ async def _retry_message(
     if pending_message is None:
         yield _ui_result(current_history, thread_id, None, None)
         return
-    yield _ui_result(current_history, thread_id, None, None, "Generating...")
+    yield _ui_result(current_history, thread_id, None, None, "Generating...", busy=True)
     async for result in _deliver_message(
         current_history,
         thread_id,
@@ -335,6 +341,32 @@ async def _resolve_approval(
     return _ui_result(updated_history, thread_id, None, next_approval)
 
 
+async def _resolve_approval_flow(
+    *,
+    approved: bool,
+    history: ChatHistory | None,
+    thread_id: str | None,
+    pending_approval: PendingApproval | None,
+    client: AgentApi,
+) -> AsyncIterator[UiResult]:
+    current_history = [] if history is None else [*history]
+    yield _ui_result(
+        current_history,
+        thread_id,
+        None,
+        pending_approval,
+        "Resolving approval...",
+        busy=True,
+    )
+    yield await _resolve_approval(
+        approved=approved,
+        history=current_history,
+        thread_id=thread_id,
+        pending_approval=pending_approval,
+        client=client,
+    )
+
+
 async def send_message(
     message: str,
     history: ChatHistory | None,
@@ -367,15 +399,16 @@ async def approve_tool(
     thread_id: str | None,
     pending_approval: PendingApproval | None,
     request: gr.Request,
-) -> UiResult:
+) -> AsyncIterator[UiResult]:
     client = _authenticated_agent_api_client(request)
-    return await _resolve_approval(
+    async for result in _resolve_approval_flow(
         approved=True,
         history=history,
         thread_id=thread_id,
         pending_approval=pending_approval,
         client=client,
-    )
+    ):
+        yield result
 
 
 async def reject_tool(
@@ -383,15 +416,16 @@ async def reject_tool(
     thread_id: str | None,
     pending_approval: PendingApproval | None,
     request: gr.Request,
-) -> UiResult:
+) -> AsyncIterator[UiResult]:
     client = _authenticated_agent_api_client(request)
-    return await _resolve_approval(
+    async for result in _resolve_approval_flow(
         approved=False,
         history=history,
         thread_id=thread_id,
         pending_approval=pending_approval,
         client=client,
-    )
+    ):
+        yield result
 
 
 def create_app() -> gr.Blocks:
@@ -419,6 +453,7 @@ def create_app() -> gr.Blocks:
         send_inputs = [message_input, chatbot, thread_state]
         outputs = [
             message_input,
+            send_button,
             chatbot,
             thread_state,
             pending_message_state,
