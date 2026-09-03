@@ -43,6 +43,8 @@ The Compose files have separate responsibilities:
   communication, environment variables, dependencies, and persistent volumes.
 - `compose.local.yaml` extends the base for local development. It publishes
   Redis, Chroma, and internal API ports on `127.0.0.1` for diagnostics.
+- `compose.gpu.yaml` optionally gives Ollama access to NVIDIA GPUs and keeps
+  loaded models resident for 30 minutes to reduce time to first token.
 - `compose.production.yaml` extends the base for EC2. It selects the five
   application images stored in ECR using the required `IMAGE_TAG` value.
 
@@ -52,6 +54,7 @@ are alternative overrides; they are not intended to be used together:
 
 ```text
 Local:      compose.yaml + compose.local.yaml
+NVIDIA GPU: compose.yaml + compose.gpu.yaml
 Production: compose.yaml + compose.production.yaml
 ```
 
@@ -62,6 +65,30 @@ docker compose \
   -f infra/compose.yaml \
   -f infra/compose.local.yaml \
   up -d --build
+```
+
+For NVIDIA GPU acceleration without publishing the local diagnostic ports:
+
+```bash
+docker compose \
+  -f infra/compose.yaml \
+  -f infra/compose.gpu.yaml \
+  up -d --build
+```
+
+The GPU override reserves all NVIDIA GPUs for Ollama and sets
+`OLLAMA_KEEP_ALIVE=30m`. The `qwen3.5:2b` chat model is approximately 2.7 GB,
+leaving headroom on a 4 GB GPU for runtime buffers and context. Do not use the
+override on hosts without NVIDIA container GPU support.
+
+While processing a prompt, verify GPU offloading with `nvidia-smi` on the host
+and inspect Ollama's allocation with:
+
+```bash
+docker compose \
+  -f infra/compose.yaml \
+  -f infra/compose.gpu.yaml \
+  exec ollama ollama ps
 ```
 
 Production uses the images previously published to ECR:
@@ -122,11 +149,11 @@ can be overridden for another AWS account or Region.
 
 Notes:
 
-- `ollama-models` pulls `nomic-embed-text:v1.5` and `qwen3.5:9b` when needed
+- `ollama-models` pulls `nomic-embed-text:v1.5` and `qwen3.5:2b` when needed
   before the dependent APIs start. Both models are persisted in the shared
   `ollama-data` volume and served by the `ollama` container.
 - `embeddings-api` uses `nomic-embed-text:v1.5`, while `agent-api` uses
-  `ollama:qwen3.5:9b`; both connect to Ollama through `http://ollama:11434` on
+  `ollama:qwen3.5:2b`; both connect to Ollama through `http://ollama:11434` on
   the private Compose network.
 - `agent-api` uses Redis's shallow LangGraph checkpointer, retaining only the
   latest checkpoint per thread. Inactive checkpoints expire after 24 hours;

@@ -1,0 +1,12 @@
+services:
+  ollama:
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+    environment:
+      OLLAMA_KEEP_ALIVE: 30m
+      CUDA_ERROR_LEVEL: "50"
