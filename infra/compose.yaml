@@ -19,6 +19,34 @@ services:
     volumes:
       - chroma-data:/chroma/chroma
 
+  ollama:
+    image: ollama/ollama:latest
+    container_name: employee-ops-ollama
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "ollama", "list"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    volumes:
+      - ollama-data:/root/.ollama
+
+  ollama-models:
+    image: ollama/ollama:latest
+    container_name: employee-ops-ollama-models
+    restart: "no"
+    depends_on:
+      ollama:
+        condition: service_healthy
+    environment:
+      OLLAMA_HOST: http://ollama:11434
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        set -e
+        ollama pull nomic-embed-text:v1.5
+        ollama pull qwen3.5:9b
+
   embeddings-api:
     build:
       context: ..
@@ -26,16 +54,17 @@ services:
     container_name: employee-ops-embeddings-api
     restart: unless-stopped
     depends_on:
-      - chroma
+      chroma:
+        condition: service_started
+      ollama-models:
+        condition: service_completed_successfully
     environment:
       SERVICE_NAME: embeddings-api
       SERVICE_VERSION: docker
       MODEL_NAME: nomic-embed-text:v1.5
-      OLLAMA_BASE_URL: http://host.docker.internal:11434
+      OLLAMA_BASE_URL: http://ollama:11434
       OLLAMA_TIMEOUT_SECONDS: "300"
       PYTHONPATH: /app/libs/contracts/src:/app/services/embeddings_api/src
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
 
   ingestion-api:
     build:
@@ -84,18 +113,19 @@ services:
         condition: service_healthy
       retrieve-api:
         condition: service_started
+      ollama-models:
+        condition: service_completed_successfully
     env_file:
       - ../services/agent_api/.env
     environment:
       SERVICE_NAME: agent-api
       SERVICE_VERSION: docker
-      OLLAMA_BASE_URL: http://host.docker.internal:11434
+      LLM_MODEL: ollama:qwen3.5:9b
+      OLLAMA_BASE_URL: http://ollama:11434
       REDIS_URL: redis://redis:6379
       CHECKPOINT_TTL_MINUTES: "1440"
       RETRIEVE_API_URL: http://retrieve-api:8000
       RETRIEVE_API_TIMEOUT_SECONDS: "300"
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
 
   gradio-ui:
     build:
@@ -156,4 +186,5 @@ volumes:
   caddy-config:
   caddy-data:
   chroma-data:
+  ollama-data:
   redis-data:

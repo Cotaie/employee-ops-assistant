@@ -6,6 +6,8 @@ Current services:
 
 - `redis` for the Agent API's latest per-thread LangGraph checkpoint
 - `chroma` for vector storage
+- `ollama` for serving the chat and embedding models
+- `ollama-models` for pulling required models before the APIs start
 - `embeddings-api` for embedding generation
 - `ingestion-api` for document ingestion
 - `oauth2-proxy` for Google OAuth in front of the Gradio UI
@@ -120,14 +122,16 @@ can be overridden for another AWS account or Region.
 
 Notes:
 
-- `embeddings-api` calls the host Ollama service with the pinned
-  `nomic-embed-text:v1.5` embedding model.
+- `ollama-models` pulls `nomic-embed-text:v1.5` and `qwen3.5:9b` when needed
+  before the dependent APIs start. Both models are persisted in the shared
+  `ollama-data` volume and served by the `ollama` container.
+- `embeddings-api` uses `nomic-embed-text:v1.5`, while `agent-api` uses
+  `ollama:qwen3.5:9b`; both connect to Ollama through `http://ollama:11434` on
+  the private Compose network.
 - `agent-api` uses Redis's shallow LangGraph checkpointer, retaining only the
   latest checkpoint per thread. Inactive checkpoints expire after 24 hours;
   access refreshes that TTL. At approximately 4,000 tokens, older conversation
   history is summarized while the latest five messages remain intact.
-- Pull both required Ollama models before starting locally:
-  `ollama pull qwen3:1.7b` and `ollama pull nomic-embed-text:v1.5`.
 - `ingestion-api` receives `EMBEDDINGS_API_URL`, `CHROMA_HOST`, and `CHROMA_PORT` for future integration work.
 - OAuth2 Proxy port `4180` and Gradio port `7860` are available only inside the
   Compose network, so callers cannot bypass authentication.
