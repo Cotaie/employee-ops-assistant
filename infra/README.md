@@ -4,6 +4,7 @@ This folder contains local container infrastructure for Employee Ops Assistant.
 
 Current services:
 
+- `postgres` for persistent relational data
 - `redis` for the Agent API's latest per-thread LangGraph checkpoint
 - `chroma` for vector storage
 - `ollama` for serving the chat and embedding models
@@ -103,7 +104,8 @@ IMAGE_TAG=<commit-sha> docker compose \
 ## Local development with individual service access
 
 The base configuration publishes only Caddy. To also reach Redis, Chroma,
-and the internal APIs individually through `localhost`, add the local override:
+PostgreSQL, and the internal APIs individually through `localhost`, add the
+local override:
 
 ```bash
 docker compose \
@@ -116,6 +118,36 @@ Do not use `compose.local.yaml` on EC2. The services communicate through the
 private Compose network without publishing these diagnostic ports. The local
 override binds its ports to `127.0.0.1`, so they are not exposed to other
 devices on the local network.
+
+## PostgreSQL
+
+The `postgres` service stores its database files in the named
+`postgres-data` volume. The development defaults can be overridden before
+starting Compose:
+
+```bash
+export POSTGRES_DB=employee_ops
+export POSTGRES_USER=employee_ops
+export POSTGRES_PASSWORD=<local-password>
+```
+
+Services running inside the Compose network connect through the service name:
+
+```text
+postgresql://employee_ops:<local-password>@postgres:5432/employee_ops
+```
+
+When `compose.local.yaml` is included, applications running directly on the
+host connect through the loopback-only published port:
+
+```text
+postgresql://employee_ops:<local-password>@localhost:5432/employee_ops
+```
+
+Database contents survive container recreation and `docker compose down`.
+Running `docker compose down --volumes` explicitly deletes PostgreSQL data as
+well as the other named volumes in the stack. Set non-development credentials
+through the environment; do not use the local defaults for a deployed stack.
 
 ## EC2 production-like deployment
 
@@ -149,6 +181,9 @@ can be overridden for another AWS account or Region.
 
 Notes:
 
+- `postgres` persists relational data in the `postgres-data` volume and is
+  reachable only within the private Compose network unless the local override
+  publishes it on `127.0.0.1:5432`.
 - `ollama-models` pulls `nomic-embed-text:v1.5` and `qwen3.5:2b` when needed
   before the dependent APIs start. Both models are persisted in the shared
   `ollama-data` volume and served by the `ollama` container.
