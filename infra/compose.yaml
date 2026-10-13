@@ -136,7 +136,6 @@ services:
     environment:
       SERVICE_NAME: agent-api
       SERVICE_VERSION: docker
-      LLM_MODEL: ollama:qwen3.5:2b
       OLLAMA_BASE_URL: http://ollama:11434
       REDIS_URL: redis://redis:6379
       CHECKPOINT_TTL_MINUTES: "1440"

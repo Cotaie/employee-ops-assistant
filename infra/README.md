@@ -92,6 +92,26 @@ docker compose \
   exec ollama ollama ps
 ```
 
+## Chat model provider
+
+The Agent API reads its chat model provider from
+`services/agent_api/.env`. To use OpenAI, configure:
+
+```text
+LLM_MODEL=openai:gpt-5.4-mini
+LLM_API_KEY=<openai-api-key>
+```
+
+To use the local Ollama chat model instead, configure:
+
+```text
+LLM_MODEL=ollama:qwen3.5:2b
+```
+
+`LLM_API_KEY` is not required for Ollama. Restart `agent-api` after switching
+providers. Ollama remains part of the stack because `embeddings-api` uses the
+local `nomic-embed-text:v1.5` model for retrieval embeddings.
+
 Production uses the images previously published to ECR:
 
 ```bash

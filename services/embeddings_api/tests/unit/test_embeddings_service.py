@@ -2,8 +2,9 @@ import json
 
 import httpx
 import pytest
-from contracts import EmbeddingsResponse
-
+from embeddings_api.app.core.config import Settings
+from embeddings_api.app.integrations.ollama import OllamaProvider
+from embeddings_api.app.services.embedding_result import EmbeddingResult
 from embeddings_api.app.services.embeddings import EmbeddingsService
 
 
@@ -29,12 +30,14 @@ async def test_embeddings_service_calls_ollama_with_batched_inputs() -> None:
         transport=transport,
     ) as client:
         service = EmbeddingsService(
-            model_name="nomic-embed-text:v1.5",
-            client=client,
+            provider=OllamaProvider(
+                Settings(MODEL_NAME="nomic-embed-text:v1.5"),
+                client=client,
+            ),
         )
         response = await service.generate_embeddings(["a", "bb"])
 
-    assert response == EmbeddingsResponse(
+    assert response == EmbeddingResult(
         embeddings=[[0.0, 1.0], [1.0, 2.0]],
         model="nomic-embed-text:v1.5",
         dimensions=2,
@@ -58,8 +61,10 @@ async def test_embeddings_service_rejects_inconsistent_vector_dimensions() -> No
         transport=transport,
     ) as client:
         service = EmbeddingsService(
-            model_name="nomic-embed-text:v1.5",
-            client=client,
+            provider=OllamaProvider(
+                Settings(MODEL_NAME="nomic-embed-text:v1.5"),
+                client=client,
+            ),
         )
 
         with pytest.raises(ValueError, match="same dimension"):
