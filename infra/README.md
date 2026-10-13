@@ -7,7 +7,7 @@ Current services:
 - `postgres` for persistent relational data
 - `redis` for the Agent API's latest per-thread LangGraph checkpoint
 - `chroma` for vector storage
-- `ollama` for serving the chat and embedding models
+- `ollama` for serving the local chat and embedding models
 - `ollama-models` for pulling required models before the APIs start
 - `embeddings-api` for embedding generation
 - `ingestion-api` for document ingestion
@@ -219,6 +219,16 @@ Notes:
   Compose network, so callers cannot bypass authentication.
 - `compose.local.yaml` optionally publishes Redis, Chroma, and API ports for
   local diagnostics; never include it in the EC2 deployment command.
+- For local Bedrock embeddings, authenticate with `aws sso login --profile
+  employee-ops`. The local Compose override defaults to
+  `EMBEDDINGS_PROVIDER=bedrock`, `MODEL_NAME=amazon.titan-embed-text-v2:0`, and passes
+  the selected AWS profile to `embeddings-api`; credentials remain in the host
+  AWS config directory. Titan V2 is invoked directly in `eu-central-1` and
+  requires permission and an applicable on-demand quota in that Region.
+- Changing embedding models requires re-embedding the corpus. Set
+  `CHROMA_COLLECTION_NAME` to a fresh collection name for the Bedrock index,
+  use it for both ingestion and retrieval, and ingest the documents again. The
+  local Compose override defaults to `ingested_documents_titan_v2`.
 - `compose.production.yaml` changes only the five application image names.
   Redis, Chroma, OAuth2 Proxy, and Caddy continue using their pinned public
   images from the base configuration.

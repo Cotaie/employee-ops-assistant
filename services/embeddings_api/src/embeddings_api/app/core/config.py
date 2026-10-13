@@ -24,6 +24,20 @@ class Settings(BaseSettings):
         alias="OLLAMA_TIMEOUT_SECONDS",
         gt=0,
     )
+    bedrock_region: str = Field(default="eu-central-1", alias="BEDROCK_REGION")
+    bedrock_dimensions: int = Field(default=1024, alias="BEDROCK_DIMENSIONS")
+    bedrock_max_concurrency: int = Field(
+        default=4,
+        alias="BEDROCK_MAX_CONCURRENCY",
+        gt=0,
+    )
+
+    @field_validator("bedrock_dimensions")
+    @classmethod
+    def validate_bedrock_dimensions(cls, value: int) -> int:
+        if value not in {256, 512, 1024}:
+            raise ValueError("Titan Text Embeddings V2 dimensions must be 256, 512, or 1024.")
+        return value
 
     @field_validator("service_version", mode="before")
     @classmethod

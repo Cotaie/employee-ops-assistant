@@ -1,5 +1,5 @@
-from embeddings_api.app.services.embedding_result import EmbeddingResult
 from embeddings_api.app.services.embedding_provider import EmbeddingProvider
+from embeddings_api.app.services.embedding_result import EmbeddingResult
 
 
 class EmbeddingsService:

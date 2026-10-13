@@ -14,16 +14,26 @@ services:
   embeddings-api:
     ports:
       - "127.0.0.1:8000:8000"
+    environment:
+      EMBEDDINGS_PROVIDER: ${EMBEDDINGS_PROVIDER:-bedrock}
+      MODEL_NAME: ${MODEL_NAME:-amazon.titan-embed-text-v2:0}
+      AWS_PROFILE: ${AWS_PROFILE:-employee-ops}
+    volumes:
+      - ${HOME}/.aws:/root/.aws:ro
 
   ingestion-api:
     ports:
       - "127.0.0.1:8001:8000"
+    environment:
+      CHROMA_COLLECTION_NAME: ${CHROMA_COLLECTION_NAME:-ingested_documents_titan_v2}
     volumes:
       - ../data/documents:/data/documents:ro
 
   retrieve-api:
     ports:
       - "127.0.0.1:8004:8000"
+    environment:
+      CHROMA_COLLECTION_NAME: ${CHROMA_COLLECTION_NAME:-ingested_documents_titan_v2}
 
   agent-api:
     ports:
