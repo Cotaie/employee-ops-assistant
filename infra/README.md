@@ -109,8 +109,8 @@ LLM_MODEL=ollama:qwen3.5:2b
 ```
 
 `LLM_API_KEY` is not required for Ollama. Restart `agent-api` after switching
-providers. Ollama remains part of the stack because `embeddings-api` uses the
-local `nomic-embed-text:v1.5` model for retrieval embeddings.
+providers. Ollama remains in the stack to serve the local chat model. The
+embeddings API uses Amazon Titan Text Embeddings V2 through Bedrock.
 
 Production uses the images previously published to ECR:
 
@@ -204,12 +204,11 @@ Notes:
 - `postgres` persists relational data in the `postgres-data` volume and is
   reachable only within the private Compose network unless the local override
   publishes it on `127.0.0.1:5432`.
-- `ollama-models` pulls `nomic-embed-text:v1.5` and `qwen3.5:2b` when needed
-  before the dependent APIs start. Both models are persisted in the shared
-  `ollama-data` volume and served by the `ollama` container.
-- `embeddings-api` uses `nomic-embed-text:v1.5`, while `agent-api` uses
-  `ollama:qwen3.5:2b`; both connect to Ollama through `http://ollama:11434` on
-  the private Compose network.
+- `ollama-models` pulls `qwen3.5:2b` for the Agent API chat model. The model is
+  persisted in the shared `ollama-data` volume and served by the `ollama`
+  container.
+- `embeddings-api` uses Amazon Titan Text Embeddings V2 through Bedrock, while
+  `agent-api` uses `ollama:qwen3.5:2b` for local chat.
 - `agent-api` uses Redis's shallow LangGraph checkpointer, retaining only the
   latest checkpoint per thread. Inactive checkpoints expire after 24 hours;
   access refreshes that TTL. At approximately 4,000 tokens, older conversation
@@ -220,11 +219,10 @@ Notes:
 - `compose.local.yaml` optionally publishes Redis, Chroma, and API ports for
   local diagnostics; never include it in the EC2 deployment command.
 - For local Bedrock embeddings, authenticate with `aws sso login --profile
-  employee-ops`. The local Compose override defaults to
-  `EMBEDDINGS_PROVIDER=bedrock`, `MODEL_NAME=amazon.titan-embed-text-v2:0`, and passes
-  the selected AWS profile to `embeddings-api`; credentials remain in the host
-  AWS config directory. Titan V2 is invoked directly in `eu-central-1` and
-  requires permission and an applicable on-demand quota in that Region.
+  employee-ops`. The local Compose override passes the selected AWS profile to
+  `embeddings-api`; credentials remain in the host AWS config directory. Titan
+  V2 is invoked directly in `eu-central-1` and requires permission and an
+  applicable on-demand quota in that Region.
 - Changing embedding models requires re-embedding the corpus. Set
   `CHROMA_COLLECTION_NAME` to a fresh collection name for the Bedrock index,
   use it for both ingestion and retrieval, and ingest the documents again. The

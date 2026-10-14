@@ -6,8 +6,8 @@ import pytest
 from embeddings_api.app.main import create_app
 
 pytestmark = pytest.mark.skipif(
-    os.getenv("RUN_OLLAMA_INTEGRATION") != "1",
-    reason="Set RUN_OLLAMA_INTEGRATION=1 to test against a running Ollama instance.",
+    os.getenv("RUN_BEDROCK_INTEGRATION") != "1",
+    reason="Set RUN_BEDROCK_INTEGRATION=1 to test against Amazon Bedrock.",
 )
 
 
@@ -34,7 +34,7 @@ async def test_health_uses_real_app_settings() -> None:
 
 
 @pytest.mark.anyio
-async def test_embeddings_returns_real_vectors_from_ollama() -> None:
+async def test_embeddings_returns_real_vectors_from_bedrock() -> None:
     app = create_app()
 
     async with app.router.lifespan_context(app):

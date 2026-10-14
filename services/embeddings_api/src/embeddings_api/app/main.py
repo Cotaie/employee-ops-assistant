@@ -5,21 +5,20 @@ from fastapi import FastAPI
 
 from embeddings_api.app.api.routes import register_routes
 from embeddings_api.app.core.config import get_settings
-from embeddings_api.app.integrations.factory import create_embedding_provider
+from embeddings_api.app.integrations.bedrock import BedrockProvider
 from embeddings_api.app.services.embeddings import EmbeddingsService
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
-    app.state.settings = get_settings()
-
-    settings = app.state.settings
+    settings = get_settings()
+    app.state.settings = settings
 
     if hasattr(app.state, "embeddings_service"):
         yield
         return
 
-    provider = create_embedding_provider(settings)
+    provider = BedrockProvider(settings)
     try:
         app.state.embeddings_service = EmbeddingsService(provider=provider)
         yield

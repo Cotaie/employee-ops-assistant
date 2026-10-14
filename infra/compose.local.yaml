@@ -15,7 +15,6 @@ services:
     ports:
       - "127.0.0.1:8000:8000"
     environment:
-      EMBEDDINGS_PROVIDER: ${EMBEDDINGS_PROVIDER:-bedrock}
       MODEL_NAME: ${MODEL_NAME:-amazon.titan-embed-text-v2:0}
       AWS_PROFILE: ${AWS_PROFILE:-employee-ops}
     volumes:

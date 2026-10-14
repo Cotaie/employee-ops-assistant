@@ -3,12 +3,13 @@
 ## 1. Purpose
 
 `EmbeddingsApi` generates vector embeddings for text inputs used by retrieval flows.
-It is a small FastAPI service backed by an Ollama embedding model and exposes:
+It is a small FastAPI service backed by Amazon Titan Text Embeddings V2 in
+Amazon Bedrock and exposes:
 
 - `GET /health`
 - `POST /embeddings`
 
-The service is stateless and keeps a shared asynchronous Ollama HTTP client in application state.
+The service is stateless and creates a Bedrock Runtime client during application startup.
 
 ## 2. Architecture
 
@@ -24,8 +25,8 @@ During startup, the app stores two objects on `app.state`:
 - `settings`
 - `embeddings_service`
 
-This keeps configuration and the Ollama-backed service available to request handlers without
-creating a new HTTP client per request.
+This keeps configuration and the Bedrock-backed service available to request handlers without
+creating a new AWS client per request.
 
 ### 2.3 Shared Contracts
 
@@ -53,7 +54,8 @@ Using shared contracts keeps the API schema consistent across services and tests
 1. Client calls `POST /embeddings` with one or more text inputs.
 2. FastAPI validates the payload with `EmbeddingsRequest`.
 3. The route handler resolves `EmbeddingsService` from application state.
-4. The service sends the complete input batch to Ollama's `POST /api/embed` endpoint.
+4. The service submits the inputs to Bedrock using Titan Text Embeddings V2. It invokes the
+   model once per input and limits in-flight calls with the configured concurrency setting.
 5. The returned vectors are validated and serialized into `EmbeddingsResponse`.
 6. The vectors are returned in the same order as the inputs.
 
@@ -65,29 +67,28 @@ Current settings:
 
 - `SERVICE_NAME`
 - `SERVICE_VERSION`
-- `MODEL_NAME`
-- `OLLAMA_BASE_URL`
-- `OLLAMA_TIMEOUT_SECONDS`
+- `MODEL_NAME` (defaults to `amazon.titan-embed-text-v2:0`)
+- `BEDROCK_REGION`
+- `BEDROCK_DIMENSIONS`
+- `BEDROCK_MAX_CONCURRENCY`
 
 Behavior:
 
 - `SERVICE_VERSION` is normalized so an empty string becomes `null`
-- `.env` is loaded from `services/embeddings_api/.env`
-
-Copy `.env.example` to `.env` when running the service directly outside Docker.
+- `.env` is loaded from `services/embeddings_api/.env` when present.
 
 ## 5. Embedding Service
 
 `EmbeddingsService` is responsible for:
 
-- requesting vectors for batches of input text from Ollama
-- preserving the model identifier returned by Ollama
+- requesting vectors for batches of input text from Bedrock
+- preserving the configured model identifier
 - validating vector count and dimensions before returning the shared contract
 
 Implementation details:
 
-- one `/api/embed` request contains the complete input list
-- the vector dimension is derived from the Ollama response
+- Bedrock is invoked once for each input text
+- the requested vector dimension is configured through `BEDROCK_DIMENSIONS`
 - every returned vector must have the same non-zero dimension
 - the number of vectors must match the number of inputs
 
@@ -128,8 +129,8 @@ Validation rules:
 
 Validation failures are handled by FastAPI and returned as `422` responses.
 
-Ollama connection and HTTP failures are surfaced when an embedding request is processed. Invalid
-or inconsistent Ollama responses fail rather than returning corrupt vector metadata.
+Bedrock invocation failures are surfaced when an embedding request is processed. Invalid or
+inconsistent model responses fail rather than returning corrupt vector metadata.
 
 ## 8. Test Strategy
 
@@ -149,7 +150,9 @@ The tests verify:
 
 ## 9. Operational Notes
 
-- Ollama must be reachable at `OLLAMA_BASE_URL` and the configured `MODEL_NAME` must be pulled.
+- The runtime identity must have permission to invoke the configured Bedrock model in
+  `BEDROCK_REGION`. Local development can use an AWS IAM Identity Center profile; deployed
+  environments should use an IAM role.
 - Changing the embedding model or dimension requires clearing affected Chroma collections and
   re-ingesting documents.
 - The local test environment may need `UV_CACHE_DIR=/tmp/uv-cache` to avoid the sandbox cache restriction.

@@ -1,1 +1,1 @@
-"""Adapters for external embedding providers."""
+"""Amazon Bedrock embedding integration."""

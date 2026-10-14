@@ -60,7 +60,6 @@ services:
     command:
       - |
         set -e
-        ollama pull nomic-embed-text:v1.5
         ollama pull qwen3.5:2b
 
   embeddings-api:
@@ -69,18 +68,10 @@ services:
       dockerfile: services/embeddings_api/Dockerfile
     container_name: employee-ops-embeddings-api
     restart: unless-stopped
-    depends_on:
-      chroma:
-        condition: service_started
-      ollama-models:
-        condition: service_completed_successfully
     environment:
       SERVICE_NAME: embeddings-api
       SERVICE_VERSION: docker
-      EMBEDDINGS_PROVIDER: ${EMBEDDINGS_PROVIDER:-ollama}
-      MODEL_NAME: ${MODEL_NAME:-nomic-embed-text:v1.5}
-      OLLAMA_BASE_URL: http://ollama:11434
-      OLLAMA_TIMEOUT_SECONDS: "300"
+      MODEL_NAME: ${MODEL_NAME:-amazon.titan-embed-text-v2:0}
       BEDROCK_REGION: ${BEDROCK_REGION:-eu-central-1}
       BEDROCK_DIMENSIONS: ${BEDROCK_DIMENSIONS:-1024}
       BEDROCK_MAX_CONCURRENCY: ${BEDROCK_MAX_CONCURRENCY:-4}
