@@ -10,8 +10,8 @@ __pycache__/
 .coverage
 *.pyc
 *.egg-info/
-services/embeddings_api/.local/
-services/embeddings_api/.env
+services/embeddings/.local/
+services/embeddings/.env
 services/ingestion_api/.env
 services/agent_api/.env
 infra/oauth2-proxy/.env

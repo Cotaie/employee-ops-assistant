@@ -5,14 +5,14 @@
 - ingest approved company documents
 - normalize content
 - chunk documents
-- generate embeddings through `EmbeddingsApi`
+- generate embeddings through the embeddings Lambda
 - store source metadata
 
 ## 2. Interface Responsibilities
 
 - accept approved enterprise documents for ingestion
 - normalize and chunk them
-- call `EmbeddingsApi`
+- call the embeddings Lambda
 - persist chunk metadata and embeddings into the vector store
 
 ## 3. Suggested Endpoints

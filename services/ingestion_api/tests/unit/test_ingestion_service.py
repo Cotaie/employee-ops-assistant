@@ -2,7 +2,6 @@ from types import SimpleNamespace
 
 import pytest
 from clients.chroma import ChromaChunkRecord, ChromaClient, ChromaStoredRecord
-from clients.embeddings_api import EmbeddingsApiClient
 from contracts import EmbeddingsResponse
 from contracts.document_ingestion import (
     DocumentIngestionRequest,
@@ -17,7 +16,7 @@ from ingestion_api.app.services.normalization import NormalizationService
 from ingestion_api.app.services.profile_selector import ChunkingProfileSelector
 
 
-class FakeEmbeddingsApiClient(EmbeddingsApiClient):
+class FakeEmbeddingsClient:
     def __init__(self) -> None:
         self.calls: list[list[str]] = []
 
@@ -102,7 +101,7 @@ def test_ingestion_service_uses_provided_collaborators() -> None:
     chunking = ChunkingService()
     loader = DocumentLoaderService()
     chroma = FakeChromaClient()
-    embeddings = FakeEmbeddingsApiClient()
+    embeddings = FakeEmbeddingsClient()
     normalization = NormalizationService()
     selector = ChunkingProfileSelector()
 
@@ -137,7 +136,7 @@ async def test_ingest_document_runs_pipeline_and_persists_minimal_metadata(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     chroma = FakeChromaClient()
-    embeddings = FakeEmbeddingsApiClient()
+    embeddings = FakeEmbeddingsClient()
     service = IngestionService(chroma_client=chroma, embeddings_client=embeddings)
     payload = DocumentIngestionRequest(
         document_name="Benefits Guide",

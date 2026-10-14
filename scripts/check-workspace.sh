@@ -9,7 +9,7 @@ uv lock --check
 
 projects=(
     "services/agent_api"
-    "services/embeddings_api"
+    "services/embeddings"
     "services/ingestion_api"
     "services/gradio_ui"
     "services/retrieve_api"

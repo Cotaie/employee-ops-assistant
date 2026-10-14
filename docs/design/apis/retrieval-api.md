@@ -9,7 +9,7 @@
 ## 2. Interface Responsibilities
 
 - accept a knowledge lookup request
-- embed the search text by calling `EmbeddingsApi`
+- embed the search text by calling the embeddings Lambda
 - perform vector similarity search in Chroma
 - return the top ranked chunks with source metadata
 

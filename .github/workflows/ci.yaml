@@ -63,7 +63,7 @@ jobs:
           - image: agent-api
             dockerfile: services/agent_api/Dockerfile
           - image: embeddings-api
-            dockerfile: services/embeddings_api/Dockerfile
+            dockerfile: services/embeddings/Dockerfile
           - image: gradio-ui
             dockerfile: services/gradio_ui/Dockerfile
           - image: ingestion-api

@@ -1,13 +1,12 @@
 import asyncio
 
 from clients.chroma import ChromaClient, ChromaQueryRecord
-from clients.embeddings_api import EmbeddingsApiClient
 from contracts import EmbeddingsResponse
 
 from retrieve_api.app.services.retrieve import RetrievalService
 
 
-class FakeEmbeddingsClient(EmbeddingsApiClient):
+class FakeEmbeddingsClient:
     def __init__(self) -> None:
         self.inputs: list[list[str]] = []
 

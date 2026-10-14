@@ -1,4 +1,4 @@
-# EmbeddingsApi Contract
+# Embeddings Lambda Contract
 
 ## 1. Purpose
 
@@ -10,15 +10,13 @@
 - accept text payloads for embedding generation
 - return embeddings for one or more content items
 
-## 3. Suggested Endpoints
+## 3. Lambda Invocation Contract
 
-### `POST /embeddings`
+Invoke the Lambda synchronously through the AWS SDK with this payload:
 
-Input:
+```json
+{"inputs": ["text to embed"]}
+```
 
-- one or more text items
-
-Output:
-
-- embedding vectors in the same order
+The function returns an `EmbeddingsResponse` containing the vectors in input order.
 

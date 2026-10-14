@@ -6,13 +6,13 @@ NonEmptyText = Annotated[str, StringConstraints(strip_whitespace=True, min_lengt
 
 
 class EmbeddingsRequest(BaseModel):
-    """Request payload shared by callers of EmbeddingsApi."""
+    """Request payload shared by callers of the Embeddings Lambda."""
 
     inputs: list[NonEmptyText] = Field(min_length=1, description="Text items to embed.")
 
 
 class EmbeddingsResponse(BaseModel):
-    """Response payload returned by EmbeddingsApi."""
+    """Response payload returned by the Embeddings Lambda."""
 
     embeddings: list[list[float]]
     model: str

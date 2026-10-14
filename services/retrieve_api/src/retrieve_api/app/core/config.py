@@ -13,13 +13,21 @@ class Settings(BaseSettings):
 
     service_name: str = Field(default="retrieve-api", alias="SERVICE_NAME")
     service_version: str | None = Field(default=None, alias="SERVICE_VERSION")
-    embeddings_api_url: str = Field(
-        default="http://localhost:8000",
-        alias="EMBEDDINGS_API_URL",
+    embeddings_lambda_function_name: str = Field(
+        default="employee-ops-embeddings",
+        alias="EMBEDDINGS_LAMBDA_FUNCTION_NAME",
     )
-    embeddings_api_timeout_seconds: float = Field(
+    embeddings_lambda_region: str = Field(
+        default="eu-central-1",
+        alias="EMBEDDINGS_LAMBDA_REGION",
+    )
+    embeddings_lambda_endpoint_url: str | None = Field(
+        default=None,
+        alias="EMBEDDINGS_LAMBDA_ENDPOINT_URL",
+    )
+    embeddings_lambda_timeout_seconds: float = Field(
         default=300.0,
-        alias="EMBEDDINGS_API_TIMEOUT_SECONDS",
+        alias="EMBEDDINGS_LAMBDA_TIMEOUT_SECONDS",
         gt=0,
     )
     chroma_host: str = Field(default="localhost", alias="CHROMA_HOST")

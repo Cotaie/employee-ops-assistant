@@ -2,7 +2,7 @@ from dataclasses import dataclass, field
 from datetime import datetime
 
 from clients.chroma import ChromaChunkRecord, ChromaClient, ChromaStoredRecord
-from clients.embeddings_api import EmbeddingsApiClient
+from clients.embeddings import EmbeddingsClient
 from contracts import EmbeddingsResponse
 from contracts.document_ingestion import (
     DocumentListQuery,
@@ -35,7 +35,7 @@ class IngestionServiceBase:
         chunking_service: ChunkingService | None = None,
         document_loader_service: DocumentLoaderService | None = None,
         chroma_client: ChromaClient | None = None,
-        embeddings_client: EmbeddingsApiClient | None = None,
+        embeddings_client: EmbeddingsClient | None = None,
         normalization_service: NormalizationService | None = None,
         chunking_profile_selector: ChunkingProfileSelector | None = None,
     ) -> None:
@@ -56,7 +56,7 @@ class IngestionServiceBase:
         return self._document_loader_service
 
     @property
-    def embeddings_client(self) -> EmbeddingsApiClient | None:
+    def embeddings_client(self) -> EmbeddingsClient | None:
         return self._embeddings_client
 
     @property

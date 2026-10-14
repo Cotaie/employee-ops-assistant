@@ -4,14 +4,13 @@ import httpx
 import pytest
 from chromadb.api.models.AsyncCollection import AsyncCollection
 from clients.chroma import ChromaChunkRecord, ChromaClient, ChromaStoredRecord
-from clients.embeddings_api import EmbeddingsApiClient
 from contracts import EmbeddingsResponse
 
 from ingestion_api.app.main import create_app
 from ingestion_api.app.services.ingestion import IngestionService
 
 
-class FakeEmbeddingsApiClient(EmbeddingsApiClient):
+class FakeEmbeddingsClient:
     def __init__(self) -> None:
         pass
 
@@ -143,7 +142,7 @@ async def test_post_documents_runs_synchronous_ingestion() -> None:
     async with app.router.lifespan_context(app):
         app.state.ingestion_service = IngestionService(
             chroma_client=FakeChromaClient(),
-            embeddings_client=FakeEmbeddingsApiClient(),
+            embeddings_client=FakeEmbeddingsClient(),
         )
         transport = httpx.ASGITransport(app=app)
         async with httpx.AsyncClient(
@@ -171,7 +170,7 @@ async def test_temporary_documents_route_is_removed() -> None:
     async with app.router.lifespan_context(app):
         app.state.ingestion_service = IngestionService(
             chroma_client=FakeChromaClient(),
-            embeddings_client=FakeEmbeddingsApiClient(),
+            embeddings_client=FakeEmbeddingsClient(),
         )
         transport = httpx.ASGITransport(app=app)
         async with httpx.AsyncClient(
@@ -222,7 +221,7 @@ async def test_document_management_routes_exist_as_placeholders(
     async with app.router.lifespan_context(app):
         app.state.ingestion_service = IngestionService(
             chroma_client=FakeChromaClient(),
-            embeddings_client=FakeEmbeddingsApiClient(),
+            embeddings_client=FakeEmbeddingsClient(),
         )
         transport = httpx.ASGITransport(app=app)
         async with httpx.AsyncClient(
@@ -256,7 +255,7 @@ async def test_get_documents_returns_document_summaries() -> None:
     async with app.router.lifespan_context(app):
         app.state.ingestion_service = IngestionService(
             chroma_client=fake_chroma_client,
-            embeddings_client=FakeEmbeddingsApiClient(),
+            embeddings_client=FakeEmbeddingsClient(),
         )
         transport = httpx.ASGITransport(app=app)
         async with httpx.AsyncClient(
@@ -304,7 +303,7 @@ async def test_delete_document_uses_the_document_id_path() -> None:
     async with app.router.lifespan_context(app):
         app.state.ingestion_service = IngestionService(
             chroma_client=fake_chroma_client,
-            embeddings_client=FakeEmbeddingsApiClient(),
+            embeddings_client=FakeEmbeddingsClient(),
         )
         transport = httpx.ASGITransport(app=app)
         async with httpx.AsyncClient(
@@ -346,7 +345,7 @@ async def test_patch_document_updates_metadata_only() -> None:
     async with app.router.lifespan_context(app):
         app.state.ingestion_service = IngestionService(
             chroma_client=fake_chroma_client,
-            embeddings_client=FakeEmbeddingsApiClient(),
+            embeddings_client=FakeEmbeddingsClient(),
         )
         transport = httpx.ASGITransport(app=app)
         async with httpx.AsyncClient(
@@ -375,7 +374,7 @@ async def test_patch_document_rejects_content_changes() -> None:
     async with app.router.lifespan_context(app):
         app.state.ingestion_service = IngestionService(
             chroma_client=FakeChromaClient(),
-            embeddings_client=FakeEmbeddingsApiClient(),
+            embeddings_client=FakeEmbeddingsClient(),
         )
         transport = httpx.ASGITransport(app=app)
         async with httpx.AsyncClient(
@@ -404,7 +403,7 @@ async def test_patch_document_uses_the_document_id_path() -> None:
     async with app.router.lifespan_context(app):
         app.state.ingestion_service = IngestionService(
             chroma_client=fake_chroma_client,
-            embeddings_client=FakeEmbeddingsApiClient(),
+            embeddings_client=FakeEmbeddingsClient(),
         )
         transport = httpx.ASGITransport(app=app)
         async with httpx.AsyncClient(

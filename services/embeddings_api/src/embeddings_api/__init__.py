@@ -1,1 +1,0 @@
-"""EmbeddingsApi service package."""
