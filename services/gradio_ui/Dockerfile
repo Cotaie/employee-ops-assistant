@@ -5,13 +5,12 @@ ENV PYTHONUNBUFFERED=1
 
 WORKDIR /app
 
-COPY pyproject.toml uv.lock /app/
-COPY libs /app/libs
-COPY services /app/services
+COPY services/gradio_ui/pyproject.toml services/gradio_ui/uv.lock /app/services/gradio_ui/
+COPY services/gradio_ui/src /app/services/gradio_ui/src
 
-RUN uv sync --frozen --no-dev --package gradio-ui
+RUN uv sync --project /app/services/gradio_ui --frozen --no-dev
 
-ENV PATH="/app/.venv/bin:${PATH}"
+ENV PATH="/app/services/gradio_ui/.venv/bin:${PATH}"
 ENV PYTHONPATH="/app/services/gradio_ui/src"
 
 EXPOSE 7860

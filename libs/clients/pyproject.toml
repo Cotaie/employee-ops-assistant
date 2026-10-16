@@ -9,6 +9,9 @@ dependencies = [
     "contracts",
 ]
 
+[tool.uv.sources]
+contracts = { path = "../contracts" }
+
 [tool.setuptools.package-data]
 clients = ["py.typed"]
 
@@ -35,3 +38,7 @@ python_version = "3.12"
 strict = true
 mypy_path = ["src"]
 packages = ["clients"]
+
+[[tool.mypy.overrides]]
+module = ["botocore.*"]
+ignore_missing_imports = true

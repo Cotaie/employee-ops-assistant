@@ -10,6 +10,7 @@ __pycache__/
 .coverage
 *.pyc
 *.egg-info/
+**/build/
 services/embeddings/.local/
 services/embeddings/.env
 services/ingestion_api/.env
