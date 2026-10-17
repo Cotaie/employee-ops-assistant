@@ -1,5 +1,5 @@
-from embeddings.services.embedding_provider import EmbeddingProvider
-from embeddings.services.embedding_result import EmbeddingResult
+from embeddings.services.embeddings.contracts.interfaces import EmbeddingProvider
+from embeddings.services.embeddings.contracts.models import EmbeddingResult
 
 
 class EmbeddingsService:

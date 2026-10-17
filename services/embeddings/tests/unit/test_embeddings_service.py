@@ -1,7 +1,7 @@
 import pytest
 
-from embeddings.services.embedding_result import EmbeddingResult
 from embeddings.services.embeddings import EmbeddingsService
+from embeddings.services.embeddings.contracts.models import EmbeddingResult
 
 
 class FakeEmbeddingProvider:
