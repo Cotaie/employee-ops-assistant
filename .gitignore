@@ -11,6 +11,15 @@ __pycache__/
 *.pyc
 *.egg-info/
 **/build/
+**/.terraform/
+*.tfstate
+*.tfstate.*
+*.tfvars
+*.tfvars.json
+crash.log
+crash.*.log
+*.pem
+*:Zone.Identifier
 services/embeddings/.local/
 services/embeddings/.env
 services/ingestion_api/.env
