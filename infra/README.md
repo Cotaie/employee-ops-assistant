@@ -118,7 +118,9 @@ LLM_MODEL=ollama:qwen3.5:2b
 providers. Ollama remains in the stack to serve the local chat model. The
 embeddings Lambda uses Amazon Titan Text Embeddings V2 through Bedrock.
 
-Production uses the images previously published to ECR:
+The production Compose override selects application images from ECR. It can be
+used after Terraform provisions the repositories and a workflow publishes the
+images:
 
 ```bash
 IMAGE_TAG=<commit-sha> docker compose \
@@ -175,12 +177,16 @@ Running `docker compose down --volumes` explicitly deletes PostgreSQL data as
 well as the other named volumes in the stack. Set non-development credentials
 through the environment; do not use the local defaults for a deployed stack.
 
-## EC2 production-like deployment
+## AWS deployment status
 
-The production override selects the four commit-tagged application images that
-run on EC2. The CD workflow also publishes the embeddings Lambda image to ECR;
-Terraform will connect that image to a Lambda function. Authenticate Docker,
-then pull and start the exact commit that was published by the CD workflow:
+The EC2/CDK deployment has been retired. The CDK CloudFormation stacks and
+their resources have been deleted. Terraform is the intended owner of the ECR
+repositories and embeddings Lambda, but those resources and an image publishing
+workflow are not yet configured. The production Compose commands below are for
+use after those pieces exist; they do not deploy the Lambda.
+
+To run the production Compose services manually after images have been
+published to ECR, authenticate Docker and pull the selected commit:
 
 ```bash
 aws ecr get-login-password --region eu-central-1 \
@@ -202,9 +208,9 @@ docker compose \
 ```
 
 `IMAGE_TAG` is required and should match the full Git commit SHA shown in ECR.
-`--no-build` ensures EC2 uses the pulled ECR images instead of rebuilding the
-Dockerfiles. `ECR_REGISTRY` defaults to this project's Frankfurt registry and
-can be overridden for another AWS account or Region.
+`--no-build` ensures Compose uses the pulled ECR images instead of rebuilding
+the Dockerfiles. `ECR_REGISTRY` defaults to this project's Frankfurt registry
+and can be overridden for another AWS account or Region.
 
 Notes:
 
@@ -239,8 +245,9 @@ Notes:
   `CHROMA_COLLECTION_NAME` to a fresh collection name for the Bedrock index,
   use it for both ingestion and retrieval, and ingest the documents again. The
   local Compose override defaults to `ingested_documents_titan_v2`.
-- `compose.production.yaml` selects the four application images that run on
-  EC2. Terraform still needs to create the embeddings Lambda, its Bedrock
-  execution role, and invocation permission for the EC2 caller role.
+- `compose.production.yaml` selects the four application images for the
+  production Compose stack. Terraform still needs to create the embeddings
+  Lambda, its Bedrock execution role, and invocation permissions for its
+  caller services.
 - See [`caddy/README.md`](caddy/README.md) for local callback configuration and
-  EC2 automatic HTTPS setup.
+  Caddy configuration.
