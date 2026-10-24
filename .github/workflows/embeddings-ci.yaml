@@ -1,0 +1,78 @@
+name: Embeddings CI
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - .github/workflows/embeddings-ci.yaml
+      - .github/workflows/embeddings-cd.yaml
+      - services/embeddings/**
+      - libs/contracts/**
+      - .dockerignore
+  push:
+    branches:
+      - main
+      - feature/**
+    paths:
+      - .github/workflows/embeddings-ci.yaml
+      - .github/workflows/embeddings-cd.yaml
+      - services/embeddings/**
+      - libs/contracts/**
+      - .dockerignore
+
+permissions:
+  contents: read
+
+jobs:
+  python-validation:
+    name: Validate embeddings service in Lambda runtime image
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+        with:
+          sparse-checkout-cone-mode: false
+          sparse-checkout: |
+            /.dockerignore
+            /services/embeddings/
+            /libs/contracts/
+
+      - name: Build test image
+        run: >-
+          docker build
+          --platform linux/amd64
+          --target test
+          --file services/embeddings/Dockerfile
+          --tag employee-ops/embeddings-test:${{ github.sha }}
+          .
+
+      - name: Run embeddings checks in Lambda runtime image
+        run: docker run --rm employee-ops/embeddings-test:${{ github.sha }}
+
+  container-build:
+    name: Build embeddings Lambda image
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    needs: python-validation
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+        with:
+          sparse-checkout-cone-mode: false
+          sparse-checkout: |
+            /.dockerignore
+            /services/embeddings/
+            /libs/contracts/
+
+      - name: Build Lambda image
+        run: bash services/embeddings/scripts/build-image.sh "employee-ops/embeddings:${{ github.sha }}"
+
+      - name: Save production image
+        run: docker save --output embeddings-production.tar "employee-ops/embeddings:${{ github.sha }}"
+
+      - name: Upload production image artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: embeddings-production-${{ github.sha }}
+          path: embeddings-production.tar
+          if-no-files-found: error
