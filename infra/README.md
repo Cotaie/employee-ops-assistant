@@ -186,7 +186,7 @@ workflows validate the service and publish the tested production image to ECR;
 Terraform applies that image to the Lambda function.
 
 After CI/CD publishes an image, deploy or update the Lambda with the commit SHA
-used as its immutable ECR tag:
+used as its ECR tag:
 
 ```bash
 export IMAGE_TAG=<commit-sha>
@@ -201,7 +201,7 @@ ECR, Lambda, IAM, and Bedrock-related Terraform resources. The Lambda function
 must use an image already present in the ECR repository.
 
 To run the production Compose services manually after images have been
-published to ECR, authenticate Docker and pull the selected commit:
+published to ECR, authenticate Docker and pull the selected images:
 
 ```bash
 aws ecr get-login-password --region eu-central-1 \

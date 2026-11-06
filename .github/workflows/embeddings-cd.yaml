@@ -28,7 +28,7 @@ jobs:
       - name: Download production image artifact
         uses: actions/download-artifact@v4
         with:
-          name: embeddings-production-${{ github.event.workflow_run.head_sha }}
+          name: embeddings-production
           path: ./image
           github-token: ${{ secrets.GITHUB_TOKEN }}
           run-id: ${{ github.event.workflow_run.id }}
