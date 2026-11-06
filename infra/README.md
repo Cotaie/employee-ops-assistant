@@ -180,10 +180,25 @@ through the environment; do not use the local defaults for a deployed stack.
 ## AWS deployment status
 
 The EC2/CDK deployment has been retired. The CDK CloudFormation stacks and
-their resources have been deleted. Terraform is the intended owner of the ECR
-repositories and embeddings Lambda, but those resources and an image publishing
-workflow are not yet configured. The production Compose commands below are for
-use after those pieces exist; they do not deploy the Lambda.
+their resources have been deleted. Terraform owns the embeddings ECR repository
+and Lambda function, including its Bedrock execution permissions. The CI/CD
+workflows validate the service and publish the tested production image to ECR;
+Terraform applies that image to the Lambda function.
+
+After CI/CD publishes an image, deploy or update the Lambda with the commit SHA
+used as its immutable ECR tag:
+
+```bash
+export IMAGE_TAG=<commit-sha>
+
+terraform -chdir=infra/terraform init
+terraform -chdir=infra/terraform apply \
+  -var="embeddings_image_tag=$IMAGE_TAG"
+```
+
+This requires AWS credentials with access to the Terraform state backend,
+ECR, Lambda, IAM, and Bedrock-related Terraform resources. The Lambda function
+must use an image already present in the ECR repository.
 
 To run the production Compose services manually after images have been
 published to ECR, authenticate Docker and pull the selected commit:
@@ -246,8 +261,7 @@ Notes:
   use it for both ingestion and retrieval, and ingest the documents again. The
   local Compose override defaults to `ingested_documents_titan_v2`.
 - `compose.production.yaml` selects the four application images for the
-  production Compose stack. Terraform still needs to create the embeddings
-  Lambda, its Bedrock execution role, and invocation permissions for its
-  caller services.
+  production Compose stack. In deployed environments, caller services also
+  need `lambda:InvokeFunction` permission for the embeddings Lambda.
 - See [`caddy/README.md`](caddy/README.md) for local callback configuration and
   Caddy configuration.
