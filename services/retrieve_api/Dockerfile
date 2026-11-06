@@ -5,13 +5,16 @@ ENV PYTHONUNBUFFERED=1
 
 WORKDIR /app
 
-COPY pyproject.toml uv.lock /app/
-COPY libs /app/libs
-COPY services /app/services
+COPY services/retrieve_api/pyproject.toml services/retrieve_api/uv.lock /app/services/retrieve_api/
+COPY services/retrieve_api/src /app/services/retrieve_api/src
+COPY libs/clients/pyproject.toml /app/libs/clients/pyproject.toml
+COPY libs/clients/src /app/libs/clients/src
+COPY libs/contracts/pyproject.toml /app/libs/contracts/pyproject.toml
+COPY libs/contracts/src /app/libs/contracts/src
 
-RUN uv sync --frozen --no-dev --package retrieve-api
+RUN uv sync --project /app/services/retrieve_api --frozen --no-dev
 
-ENV PATH="/app/.venv/bin:${PATH}"
+ENV PATH="/app/services/retrieve_api/.venv/bin:${PATH}"
 ENV PYTHONPATH="/app/services/retrieve_api/src"
 
 EXPOSE 8000

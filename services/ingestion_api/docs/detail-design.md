@@ -4,7 +4,7 @@
 
 `IngestionApi` prepares documents for semantic retrieval. It loads and
 normalizes content, splits it into chunks, requests vectors from
-`EmbeddingsApi`, and stores the chunks and their provenance in Chroma.
+the embeddings Lambda, and stores the chunks and their provenance in Chroma.
 
 The service uses a vector-database-only design. It does not persist a separate
 parent document row; a logical document is reconstructed by grouping Chroma
@@ -46,7 +46,7 @@ Processing steps:
 2. normalize it
 3. select a chunking profile
 4. split it into chunks
-5. call `EmbeddingsApi`
+5. call the embeddings Lambda
 6. persist the chunks, vectors, and metadata in Chroma
 7. return the document ID and stored record counts
 
@@ -68,6 +68,6 @@ requires reingestion and new embeddings.
 
 ## 4. Service integrations
 
-- `EmbeddingsApi` generates one vector for each chunk.
+- the embeddings Lambda generates one vector for each chunk.
 - Chroma stores chunk text, vectors, and document provenance.
 - `RetrieveApi` queries the same Chroma collection for semantic retrieval.

@@ -3,7 +3,7 @@ from contextlib import asynccontextmanager
 
 import chromadb
 from clients.chroma import ChromaClient
-from clients.embeddings_api import EmbeddingsApiClient
+from clients.lambda_embeddings import LambdaEmbeddingsClient
 from fastapi import FastAPI
 
 from retrieve_api.app.api.routes.health import router as health_router
@@ -23,14 +23,20 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
         name=app.state.settings.chroma_collection_name,
         metadata={"hnsw:space": "cosine"},
     )
-    app.state.retrieval_service = RetrievalService(
-        embeddings_client=EmbeddingsApiClient(
-            app.state.settings.embeddings_api_url,
-            timeout_seconds=app.state.settings.embeddings_api_timeout_seconds,
-        ),
-        chunk_store=ChromaClient(collection=chroma_collection),
+    embeddings_client = LambdaEmbeddingsClient(
+        function_name=app.state.settings.embeddings_lambda_function_name,
+        region_name=app.state.settings.embeddings_lambda_region,
+        endpoint_url=app.state.settings.embeddings_lambda_endpoint_url,
+        timeout_seconds=app.state.settings.embeddings_lambda_timeout_seconds,
     )
-    yield
+    try:
+        app.state.retrieval_service = RetrievalService(
+            embeddings_client=embeddings_client,
+            chunk_store=ChromaClient(collection=chroma_collection),
+        )
+        yield
+    finally:
+        await embeddings_client.aclose()
 
 
 def create_app() -> FastAPI:

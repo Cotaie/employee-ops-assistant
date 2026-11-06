@@ -1,16 +1,19 @@
 # Employee Ops Assistant
 
-Python services and shared libraries are managed as a single `uv` workspace.
+Python services are managed as independent `uv` projects. Shared libraries remain in
+`libs/` and are installed from local paths by the services that use them.
 
 ## Development environment
 
-From the repository root:
+Run this from a service directory to create that service's `.venv` and install its
+dependencies:
 
 ```bash
-uv sync --all-packages
+uv sync --all-groups
 ```
 
-Use the root `.venv` as the Python interpreter for every workspace package.
+Each service has its own `pyproject.toml`, `uv.lock`, and `.venv`. Shared libraries do not
+have dedicated virtual environments; their checks use the ingestion service environment.
 
 ## Validate the workspace
 
@@ -20,5 +23,5 @@ Run all dependency, formatting, linting, typing, and test checks with:
 bash scripts/check-workspace.sh
 ```
 
-The script validates the root lockfile and then runs the applicable Ruff, mypy, and pytest
-checks inside every service and shared library.
+The script validates each project lockfile, creates or syncs each service environment, and
+runs the applicable Ruff, mypy, and pytest checks for services and shared libraries.

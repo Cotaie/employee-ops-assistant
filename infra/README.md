@@ -7,19 +7,24 @@ Current services:
 - `postgres` for persistent relational data
 - `redis` for the Agent API's latest per-thread LangGraph checkpoint
 - `chroma` for vector storage
-- `ollama` for serving the chat and embedding models
+- `ollama` for serving the local chat model
 - `ollama-models` for pulling required models before the APIs start
-- `embeddings-api` for embedding generation
+- `embeddings-api` Lambda image, run locally through the Runtime Interface Emulator
 - `ingestion-api` for document ingestion
 - `oauth2-proxy` for Google OAuth in front of the Gradio UI
 - `caddy` as the public HTTP/HTTPS reverse proxy
 
 ## Usage
 
-Run from the repository root:
+Install the AWS Lambda Runtime Interface Emulator (RIE) once, then refresh the
+local Bedrock SSO session:
 
 ```bash
-docker compose -f infra/compose.yaml up --build
+mkdir -p ~/.aws-lambda-rie
+curl -Lo ~/.aws-lambda-rie/aws-lambda-rie \
+  https://github.com/aws/aws-lambda-runtime-interface-emulator/releases/latest/download/aws-lambda-rie
+chmod +x ~/.aws-lambda-rie/aws-lambda-rie
+aws sso login --profile employee-ops
 ```
 
 Before starting the stack, create the OAuth2 Proxy environment file:
@@ -40,14 +45,13 @@ Browser access:
 
 The Compose files have separate responsibilities:
 
-- `compose.yaml` is the shared base. It defines the services, private network
-  communication, environment variables, dependencies, and persistent volumes.
-- `compose.local.yaml` extends the base for local development. It publishes
-  Redis, Chroma, and internal API ports on `127.0.0.1` for diagnostics.
+- `compose.yaml` defines the shared supporting services and APIs.
+- `compose.local.yaml` adds RIE for the local embeddings Lambda and publishes
+  diagnostic ports on `127.0.0.1`.
 - `compose.gpu.yaml` optionally gives Ollama access to NVIDIA GPUs and keeps
   loaded models resident for 30 minutes to reduce time to first token.
-- `compose.production.yaml` extends the base for EC2. It selects the five
-  application images stored in ECR using the required `IMAGE_TAG` value.
+- `compose.production.yaml` selects the four application images stored in ECR
+  using the required `IMAGE_TAG` value. Embeddings run as a separate Lambda.
 
 Compose reads files from left to right. A later file extends or overrides the
 service definitions from the files before it. The local and production files
@@ -55,11 +59,12 @@ are alternative overrides; they are not intended to be used together:
 
 ```text
 Local:      compose.yaml + compose.local.yaml
-NVIDIA GPU: compose.yaml + compose.gpu.yaml
+NVIDIA GPU: compose.yaml + compose.local.yaml + compose.gpu.yaml
 Production: compose.yaml + compose.production.yaml
 ```
 
-Local development builds the application images from their Dockerfiles:
+Local development builds the application images and runs the Lambda image
+through RIE:
 
 ```bash
 docker compose \
@@ -73,6 +78,7 @@ For NVIDIA GPU acceleration without publishing the local diagnostic ports:
 ```bash
 docker compose \
   -f infra/compose.yaml \
+  -f infra/compose.local.yaml \
   -f infra/compose.gpu.yaml \
   up -d --build
 ```
@@ -92,7 +98,29 @@ docker compose \
   exec ollama ollama ps
 ```
 
-Production uses the images previously published to ECR:
+## Chat model provider
+
+The Agent API reads its chat model provider from
+`services/agent_api/.env`. To use OpenAI, configure:
+
+```text
+LLM_MODEL=openai:gpt-5.4-mini
+LLM_API_KEY=<openai-api-key>
+```
+
+To use the local Ollama chat model instead, configure:
+
+```text
+LLM_MODEL=ollama:qwen3.5:2b
+```
+
+`LLM_API_KEY` is not required for Ollama. Restart `agent-api` after switching
+providers. Ollama remains in the stack to serve the local chat model. The
+embeddings Lambda uses Amazon Titan Text Embeddings V2 through Bedrock.
+
+The production Compose override selects application images from ECR. It can be
+used after Terraform provisions the repositories and a workflow publishes the
+images:
 
 ```bash
 IMAGE_TAG=<commit-sha> docker compose \
@@ -149,11 +177,31 @@ Running `docker compose down --volumes` explicitly deletes PostgreSQL data as
 well as the other named volumes in the stack. Set non-development credentials
 through the environment; do not use the local defaults for a deployed stack.
 
-## EC2 production-like deployment
+## AWS deployment status
 
-The production override selects the five commit-tagged application images from
-Amazon ECR. Authenticate Docker, then pull and start the exact commit that was
-published by the CD workflow:
+The EC2/CDK deployment has been retired. The CDK CloudFormation stacks and
+their resources have been deleted. Terraform owns the embeddings ECR repository
+and Lambda function, including its Bedrock execution permissions. The CI/CD
+workflows validate the service and publish the tested production image to ECR;
+Terraform applies that image to the Lambda function.
+
+After CI/CD publishes an image, deploy or update the Lambda with the commit SHA
+used as its immutable ECR tag:
+
+```bash
+export IMAGE_TAG=<commit-sha>
+
+terraform -chdir=infra/terraform init
+terraform -chdir=infra/terraform apply \
+  -var="embeddings_image_tag=$IMAGE_TAG"
+```
+
+This requires AWS credentials with access to the Terraform state backend,
+ECR, Lambda, IAM, and Bedrock-related Terraform resources. The Lambda function
+must use an image already present in the ECR repository.
+
+To run the production Compose services manually after images have been
+published to ECR, authenticate Docker and pull the selected commit:
 
 ```bash
 aws ecr get-login-password --region eu-central-1 \
@@ -175,32 +223,45 @@ docker compose \
 ```
 
 `IMAGE_TAG` is required and should match the full Git commit SHA shown in ECR.
-`--no-build` ensures EC2 uses the pulled ECR images instead of rebuilding the
-Dockerfiles. `ECR_REGISTRY` defaults to this project's Frankfurt registry and
-can be overridden for another AWS account or Region.
+`--no-build` ensures Compose uses the pulled ECR images instead of rebuilding
+the Dockerfiles. `ECR_REGISTRY` defaults to this project's Frankfurt registry
+and can be overridden for another AWS account or Region.
 
 Notes:
 
 - `postgres` persists relational data in the `postgres-data` volume and is
   reachable only within the private Compose network unless the local override
   publishes it on `127.0.0.1:5432`.
-- `ollama-models` pulls `nomic-embed-text:v1.5` and `qwen3.5:2b` when needed
-  before the dependent APIs start. Both models are persisted in the shared
-  `ollama-data` volume and served by the `ollama` container.
-- `embeddings-api` uses `nomic-embed-text:v1.5`, while `agent-api` uses
-  `ollama:qwen3.5:2b`; both connect to Ollama through `http://ollama:11434` on
-  the private Compose network.
+- `ollama-models` pulls `qwen3.5:2b` for the Agent API chat model. The model is
+  persisted in the shared `ollama-data` volume and served by the `ollama`
+  container.
+- The embeddings Lambda uses Amazon Titan Text Embeddings V2 through Bedrock,
+  while `agent-api` uses `ollama:qwen3.5:2b` for local chat.
 - `agent-api` uses Redis's shallow LangGraph checkpointer, retaining only the
   latest checkpoint per thread. Inactive checkpoints expire after 24 hours;
   access refreshes that TTL. At approximately 4,000 tokens, older conversation
   history is summarized while the latest five messages remain intact.
-- `ingestion-api` receives `EMBEDDINGS_API_URL`, `CHROMA_HOST`, and `CHROMA_PORT` for future integration work.
+- `ingestion-api` and `retrieve-api` invoke the embeddings Lambda synchronously
+  through the AWS SDK. In production, their AWS role needs
+  `lambda:InvokeFunction` permission.
 - OAuth2 Proxy port `4180` and Gradio port `7860` are available only inside the
   Compose network, so callers cannot bypass authentication.
 - `compose.local.yaml` optionally publishes Redis, Chroma, and API ports for
   local diagnostics; never include it in the EC2 deployment command.
-- `compose.production.yaml` changes only the five application image names.
-  Redis, Chroma, OAuth2 Proxy, and Caddy continue using their pinned public
-  images from the base configuration.
+- Locally, the caller services invoke RIE at `http://embeddings:8080`.
+  RIE runs the Lambda handler from the same image used for deployment. Only the
+  Lambda container receives the selected AWS profile and read-only AWS config
+  mount to call Bedrock; callers use dummy credentials for their local RIE
+  requests. Titan V2 is invoked in `eu-central-1` and requires Bedrock
+  permission and an applicable quota in that Region.
+- The local diagnostic port `9000` speaks the Lambda invocation protocol; it
+  does not provide an HTTP `/embeddings` route.
+- Changing embedding models requires re-embedding the corpus. Set
+  `CHROMA_COLLECTION_NAME` to a fresh collection name for the Bedrock index,
+  use it for both ingestion and retrieval, and ingest the documents again. The
+  local Compose override defaults to `ingested_documents_titan_v2`.
+- `compose.production.yaml` selects the four application images for the
+  production Compose stack. In deployed environments, caller services also
+  need `lambda:InvokeFunction` permission for the embeddings Lambda.
 - See [`caddy/README.md`](caddy/README.md) for local callback configuration and
-  EC2 automatic HTTPS setup.
+  Caddy configuration.

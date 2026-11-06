@@ -1,7 +1,7 @@
 from typing import Any
 
 from clients.chroma import ChromaClient
-from clients.embeddings_api import EmbeddingsApiClient
+from clients.embeddings import EmbeddingsClient
 
 
 class RetrievalService:
@@ -10,7 +10,7 @@ class RetrievalService:
     def __init__(
         self,
         *,
-        embeddings_client: EmbeddingsApiClient,
+        embeddings_client: EmbeddingsClient,
         chunk_store: ChromaClient,
     ) -> None:
         self._embeddings_client = embeddings_client

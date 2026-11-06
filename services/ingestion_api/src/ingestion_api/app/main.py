@@ -3,7 +3,7 @@ from contextlib import asynccontextmanager
 
 import chromadb
 from clients.chroma import ChromaClient
-from clients.embeddings_api import EmbeddingsApiClient
+from clients.lambda_embeddings import LambdaEmbeddingsClient
 from fastapi import FastAPI
 
 from ingestion_api.app.api.routes import register_routes
@@ -23,16 +23,22 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         metadata={"hnsw:space": "cosine"},
     )
 
-    app.state.ingestion_service = IngestionService(
-        chroma_client=ChromaClient(
-            collection=chroma_collection,
-        ),
-        embeddings_client=EmbeddingsApiClient(
-            app.state.settings.embeddings_api_url,
-            timeout_seconds=app.state.settings.embeddings_api_timeout_seconds,
-        ),
+    embeddings_client = LambdaEmbeddingsClient(
+        function_name=app.state.settings.embeddings_lambda_function_name,
+        region_name=app.state.settings.embeddings_lambda_region,
+        endpoint_url=app.state.settings.embeddings_lambda_endpoint_url,
+        timeout_seconds=app.state.settings.embeddings_lambda_timeout_seconds,
     )
-    yield
+    try:
+        app.state.ingestion_service = IngestionService(
+            chroma_client=ChromaClient(
+                collection=chroma_collection,
+            ),
+            embeddings_client=embeddings_client,
+        )
+        yield
+    finally:
+        await embeddings_client.aclose()
 
 
 def create_app() -> FastAPI:

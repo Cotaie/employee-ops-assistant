@@ -16,7 +16,7 @@ The design uses:
 
 - microservices
 - Python for service implementation
-- FastAPI for API services
+- FastAPI for HTTP API services; embeddings are provided by a direct-invocation Lambda
 - Gradio as a development-time smoke-test and manual E2E test UI
 - two cooperating AI agents
 - configurable primary and fallback LLM providers
@@ -47,9 +47,9 @@ remain intact. Durable long-term history is a deferred enhancement.
 ## 3. Architecture Constraints
 
 - the system must use microservices
-- the API implementation framework is FastAPI
+- HTTP API services use FastAPI; the embeddings Lambda is invoked directly
 - the service implementation language is Python
-- the initial mandatory services are `IngestionApi`, `EmbeddingsApi`, `RetrievalApi`, and `AgentApi`
+- the initial mandatory services are `IngestionApi`, the embeddings Lambda, `RetrievalApi`, and `AgentApi`
 - the system must use both LangChain and LangGraph
 - the system must include at least two real AI agents with distinct roles and tool access
 - the HR system used for employee-specific HR data and leave-related operations is Frappe HR
@@ -63,7 +63,7 @@ remain intact. Durable long-term history is a deferred enhancement.
 
 - `IngestionApi`
   - ingests approved company documents and larger uploaded files
-- `EmbeddingsApi`
+- the embeddings Lambda
   - generates embeddings for knowledge chunks and retrieval text
 - `RetrievalApi`
   - retrieves relevant enterprise knowledge and indexed uploaded-file content

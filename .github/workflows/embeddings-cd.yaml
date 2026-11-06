@@ -1,0 +1,61 @@
+name: Embeddings CD - Publish Lambda image
+
+on:
+  workflow_run:
+    workflows:
+      - Embeddings CI
+    types:
+      - completed
+    branches:
+      - main
+
+permissions:
+  actions: read
+  contents: read
+  id-token: write
+
+jobs:
+  publish:
+    name: Publish tested image to ECR
+    if: github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-latest
+    env:
+      AWS_REGION: eu-central-1
+      ECR_REPOSITORY: embeddings
+      IMAGE_TAG: ${{ github.event.workflow_run.head_sha }}
+
+    steps:
+      - name: Download production image artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: embeddings-production-${{ github.event.workflow_run.head_sha }}
+          path: ./image
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          run-id: ${{ github.event.workflow_run.id }}
+
+      - name: Load production image
+        run: docker load --input ./image/embeddings-production.tar
+
+      - name: Configure AWS credentials through OIDC
+        uses: aws-actions/configure-aws-credentials@v6.3.0
+        with:
+          role-to-assume: arn:aws:iam::634432338572:role/employee-ops-embeddings-ecr-publisher
+          role-session-name: GitHubActions-${{ github.run_id }}
+          aws-region: ${{ env.AWS_REGION }}
+          allowed-account-ids: "634432338572"
+
+      - name: Log in to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2.1.7
+
+      - name: Tag production image for ECR
+        env:
+          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+        run: docker tag "employee-ops/embeddings:$IMAGE_TAG" "$ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG"
+
+      - name: Push Lambda image to ECR
+        env:
+          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+        run: |
+          docker push "$ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG"
+          echo "Published tested image: $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG" >> "$GITHUB_STEP_SUMMARY"
