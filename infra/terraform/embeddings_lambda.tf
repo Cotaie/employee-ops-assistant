@@ -1,13 +1,8 @@
 data "aws_caller_identity" "current" {}
 
-variable "embeddings_image_tag" {
-  description = "Immutable image tag already published to the embeddings ECR repository."
-  type        = string
-
-  validation {
-    condition     = length(trimspace(var.embeddings_image_tag)) > 0
-    error_message = "embeddings_image_tag must be a non-empty ECR image tag."
-  }
+data "aws_ecr_image" "embeddings_latest" {
+  repository_name = aws_ecr_repository.embeddings.name
+  most_recent     = true
 }
 
 resource "aws_iam_role" "embeddings_lambda_execution" {
@@ -84,7 +79,7 @@ resource "aws_lambda_function" "embeddings" {
   function_name = "employee-ops-embeddings"
   description   = "Generates Titan Text Embeddings V2 vectors for application services."
   package_type  = "Image"
-  image_uri     = "${aws_ecr_repository.embeddings.repository_url}:${var.embeddings_image_tag}"
+  image_uri     = "${aws_ecr_repository.embeddings.repository_url}@${data.aws_ecr_image.embeddings_latest.id}"
   role          = aws_iam_role.embeddings_lambda_execution.arn
 
   architectures = ["x86_64"]

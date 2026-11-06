@@ -185,15 +185,15 @@ and Lambda function, including its Bedrock execution permissions. The CI/CD
 workflows validate the service and publish the tested production image to ECR;
 Terraform applies that image to the Lambda function.
 
-After CI/CD publishes an image, deploy or update the Lambda with the commit SHA
-used as its ECR tag:
+After CI/CD publishes an image, Terraform automatically selects the most
+recently pushed image from the embeddings ECR repository and uses its digest
+for the Lambda deployment. A successful CI/CD image publish must exist before
+planning or applying the Lambda deployment:
 
 ```bash
-export IMAGE_TAG=<commit-sha>
-
 terraform -chdir=infra/terraform init
-terraform -chdir=infra/terraform apply \
-  -var="embeddings_image_tag=$IMAGE_TAG"
+terraform -chdir=infra/terraform plan
+terraform -chdir=infra/terraform apply
 ```
 
 This requires AWS credentials with access to the Terraform state backend,
