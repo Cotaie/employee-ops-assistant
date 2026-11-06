@@ -64,6 +64,9 @@ jobs:
             /services/embeddings/
             /libs/contracts/
 
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
       - name: Build Lambda image
         run: bash services/embeddings/scripts/build-image.sh "employee-ops/embeddings:${{ github.sha }}"
 

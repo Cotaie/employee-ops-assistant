@@ -12,8 +12,12 @@ script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 repository_root="$(cd -- "$script_dir/../../.." && pwd)"
 cd "$repository_root"
 
-docker build \
+# Lambda expects one image manifest; default BuildKit provenance wraps the
+# image in an index, so disable it for this production build.
+docker buildx build \
     --platform linux/amd64 \
+    --provenance=false \
+    --load \
     --target production \
     --file services/embeddings/Dockerfile \
     --tag "$image_reference" \
