@@ -1,5 +1,4 @@
 import asyncio
-from typing import Any
 
 from embeddings.integrations.bedrock.client import BedrockClient
 from embeddings.services.embeddings.contracts.models import EmbeddingResult
