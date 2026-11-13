@@ -3,14 +3,8 @@
 from contracts.agent import ChatRequest
 from contracts.approval import ApprovalRequest
 from contracts.document_ingestion import (
-    DocumentDeleteResponse,
     DocumentIngestionRequest,
     DocumentIngestionResultResponse,
-    DocumentListQuery,
-    DocumentListResponse,
-    DocumentPatchRequest,
-    DocumentSummaryResponse,
-    DocumentUpdateResponse,
 )
 from contracts.embeddings import EmbeddingsRequest, EmbeddingsResponse
 from contracts.error import ErrorResponse
@@ -23,12 +17,6 @@ __all__ = [
     "ApprovalRequest",
     "DocumentIngestionRequest",
     "DocumentIngestionResultResponse",
-    "DocumentDeleteResponse",
-    "DocumentListQuery",
-    "DocumentListResponse",
-    "DocumentPatchRequest",
-    "DocumentSummaryResponse",
-    "DocumentUpdateResponse",
     "EmbeddingsRequest",
     "EmbeddingsResponse",
     "ErrorResponse",

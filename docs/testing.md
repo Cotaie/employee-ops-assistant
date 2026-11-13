@@ -17,7 +17,7 @@ This installs the local Python packages in editable mode:
 
 - `contracts`
 - `embeddings`
-- `ingestion-api`
+- `ingestion`
 
 Use the root interpreter in VS Code for day-to-day development:
 
@@ -38,7 +38,7 @@ UV_CACHE_DIR=/tmp/uv-cache uv run pytest
 ```
 
 ```bash
-cd services/ingestion_api
+cd services/ingestion
 UV_CACHE_DIR=/tmp/uv-cache uv sync --dev
 UV_CACHE_DIR=/tmp/uv-cache uv run pytest
 ```
@@ -50,13 +50,13 @@ Running each project test suite separately from the repository root works:
 ```bash
 UV_CACHE_DIR=/tmp/uv-cache uv run pytest libs/contracts/tests
 UV_CACHE_DIR=/tmp/uv-cache uv run pytest services/embeddings/tests
-UV_CACHE_DIR=/tmp/uv-cache uv run pytest services/ingestion_api/tests
+UV_CACHE_DIR=/tmp/uv-cache uv run pytest services/ingestion/tests
 ```
 
 Do not combine both service test trees into one `pytest` invocation yet:
 
 ```bash
-UV_CACHE_DIR=/tmp/uv-cache uv run pytest libs/contracts/tests services/embeddings/tests services/ingestion_api/tests
+UV_CACHE_DIR=/tmp/uv-cache uv run pytest libs/contracts/tests services/embeddings/tests services/ingestion/tests
 ```
 
 That combined command currently fails during collection because both services contain a top-level module named `tests/unit/test_app.py`, and `pytest` treats them as the same module in one process.

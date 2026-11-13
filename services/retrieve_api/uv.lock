@@ -559,16 +559,21 @@ version = "0.1.0"
 source = { directory = "../../libs/clients" }
 dependencies = [
     { name = "boto3" },
-    { name = "chromadb" },
     { name = "contracts" },
+]
+
+[package.optional-dependencies]
+chroma = [
+    { name = "chromadb" },
 ]
 
 [package.metadata]
 requires-dist = [
     { name = "boto3", specifier = ">=1.40,<2" },
-    { name = "chromadb", specifier = ">=0.5.23,<1.0.0" },
+    { name = "chromadb", marker = "extra == 'chroma'", specifier = ">=0.5.23,<1.0.0" },
     { name = "contracts", directory = "../../libs/contracts" },
 ]
+provides-extras = ["chroma"]
 
 [package.metadata.requires-dev]
 dev = [
@@ -2293,7 +2298,7 @@ name = "retrieve-api"
 version = "0.1.0"
 source = { editable = "." }
 dependencies = [
-    { name = "clients" },
+    { name = "clients", extra = ["chroma"] },
     { name = "contracts" },
     { name = "fastapi" },
     { name = "pydantic-settings" },
@@ -2310,7 +2315,7 @@ dev = [
 
 [package.metadata]
 requires-dist = [
-    { name = "clients", directory = "../../libs/clients" },
+    { name = "clients", extras = ["chroma"], directory = "../../libs/clients" },
     { name = "contracts", directory = "../../libs/contracts" },
     { name = "fastapi", specifier = ">=0.115.0,<1.0.0" },
     { name = "pydantic-settings", specifier = ">=2.10.0,<3.0.0" },

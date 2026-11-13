@@ -5,9 +5,11 @@ description = "Shared API clients for Employee Ops Assistant services."
 requires-python = ">=3.12"
 dependencies = [
     "boto3>=1.40,<2",
-    "chromadb>=0.5.23,<1.0.0",
     "contracts",
 ]
+
+[project.optional-dependencies]
+chroma = ["chromadb>=0.5.23,<1.0.0"]
 
 [tool.uv.sources]
 contracts = { path = "../contracts" }

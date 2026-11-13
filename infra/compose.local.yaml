@@ -31,23 +31,6 @@ services:
     ports:
       - "127.0.0.1:8002:8000"
 
-  ingestion-api:
-    ports:
-      - "127.0.0.1:8001:8000"
-    environment:
-      EMBEDDINGS_LAMBDA_FUNCTION_NAME: function
-      EMBEDDINGS_LAMBDA_REGION: eu-central-1
-      EMBEDDINGS_LAMBDA_ENDPOINT_URL: http://embeddings:8080
-      AWS_ACCESS_KEY_ID: local-rie
-      AWS_SECRET_ACCESS_KEY: local-rie
-      AWS_DEFAULT_REGION: eu-central-1
-      CHROMA_COLLECTION_NAME: ${CHROMA_COLLECTION_NAME:-ingested_documents_titan_v2}
-    depends_on:
-      - embeddings
-      - chroma
-    volumes:
-      - ../data/documents:/data/documents:ro
-
   retrieve-api:
     ports:
       - "127.0.0.1:8004:8000"

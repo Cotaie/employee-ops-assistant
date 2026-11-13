@@ -171,7 +171,7 @@ This collaboration is required to support mixed employee requests where one answ
 2. `AgentApi` selects the primary or fallback LLM path according to configuration and runtime availability.
 3. `AgentApi` inspects the file metadata and determines whether each file is below or above the configured direct-context threshold.
 4. Smaller files are passed directly into the active request context.
-5. Larger files are sent to `IngestionApi`, embedded through the embeddings Lambda, stored in Chroma, and retrieved through `RetrievalApi`.
+5. Larger files are sent to the ingestion Lambda, embedded through the embeddings Lambda, stored for retrieval, and retrieved through `RetrievalApi`.
 6. The relevant agent or agents produce the summary or discussion response.
 7. If the active conversation context exceeds the configured token threshold, `AgentApi` updates the conversation summary.
 8. Any temporary uploaded-file artifacts that were created for the request are deleted after use.

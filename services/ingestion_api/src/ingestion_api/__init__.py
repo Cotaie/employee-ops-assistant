@@ -1,1 +1,0 @@
-"""IngestionApi service package."""

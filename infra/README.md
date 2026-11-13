@@ -10,7 +10,7 @@ Current services:
 - `ollama` for serving the local chat model
 - `ollama-models` for pulling required models before the APIs start
 - `embeddings-api` Lambda image, run locally through the Runtime Interface Emulator
-- `ingestion-api` for document ingestion
+- the ingestion Lambda for document ingestion
 - `oauth2-proxy` for Google OAuth in front of the Gradio UI
 - `caddy` as the public HTTP/HTTPS reverse proxy
 
@@ -241,7 +241,7 @@ Notes:
   latest checkpoint per thread. Inactive checkpoints expire after 24 hours;
   access refreshes that TTL. At approximately 4,000 tokens, older conversation
   history is summarized while the latest five messages remain intact.
-- `ingestion-api` and `retrieve-api` invoke the embeddings Lambda synchronously
+- the ingestion Lambda and `retrieve-api` invoke the embeddings Lambda synchronously
   through the AWS SDK. In production, their AWS role needs
   `lambda:InvokeFunction` permission.
 - OAuth2 Proxy port `4180` and Gradio port `7860` are available only inside the

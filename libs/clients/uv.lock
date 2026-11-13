@@ -559,8 +559,12 @@ version = "0.1.0"
 source = { virtual = "." }
 dependencies = [
     { name = "boto3" },
-    { name = "chromadb" },
     { name = "contracts" },
+]
+
+[package.optional-dependencies]
+chroma = [
+    { name = "chromadb" },
 ]
 
 [package.dev-dependencies]
@@ -573,9 +577,10 @@ dev = [
 [package.metadata]
 requires-dist = [
     { name = "boto3", specifier = ">=1.40,<2" },
-    { name = "chromadb", specifier = ">=0.5.23,<1.0.0" },
+    { name = "chromadb", marker = "extra == 'chroma'", specifier = ">=0.5.23,<1.0.0" },
     { name = "contracts", directory = "../contracts" },
 ]
+provides-extras = ["chroma"]
 
 [package.metadata.requires-dev]
 dev = [

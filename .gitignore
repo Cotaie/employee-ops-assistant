@@ -22,7 +22,7 @@ crash.*.log
 *:Zone.Identifier
 services/embeddings/.local/
 services/embeddings/.env
-services/ingestion_api/.env
+services/ingestion/.env
 services/agent_api/.env
 infra/oauth2-proxy/.env
 data/documents/

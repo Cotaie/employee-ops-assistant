@@ -8,7 +8,7 @@ cd "$repository_root"
 services=(
     "services/agent_api"
     "services/embeddings"
-    "services/ingestion_api"
+    "services/ingestion"
     "services/gradio_ui"
     "services/retrieve_api"
 )
@@ -39,15 +39,15 @@ for project in "libs/clients" "libs/contracts"; do
     (
         cd "$project"
         uv lock --check
-        uv run --project ../../services/ingestion_api --no-sync ruff format --check .
-        uv run --project ../../services/ingestion_api --no-sync ruff check .
+        uv run --project ../../services/retrieve_api --no-sync ruff format --check .
+        uv run --project ../../services/retrieve_api --no-sync ruff check .
 
         if [[ -d src ]]; then
-            uv run --project ../../services/ingestion_api --no-sync mypy src
+            uv run --project ../../services/retrieve_api --no-sync mypy src
         fi
 
         if [[ -d tests ]]; then
-            uv run --project ../../services/ingestion_api --no-sync pytest
+            uv run --project ../../services/retrieve_api --no-sync pytest
         fi
     )
 done
