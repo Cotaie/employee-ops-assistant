@@ -182,6 +182,8 @@ through the environment; do not use the local defaults for a deployed stack.
 The EC2/CDK deployment has been retired. The CDK CloudFormation stacks and
 their resources have been deleted. Terraform owns the embeddings and ingestion
 ECR repositories and Lambda functions, including their execution permissions.
+The ingestion source bucket sends object-created notifications to an SQS queue;
+the ingestion Lambda consumes that queue and downloads the referenced objects.
 The CI/CD workflows validate both Lambda services and publish their tested
 production images to ECR; Terraform applies each image to its corresponding
 Lambda.
@@ -203,7 +205,9 @@ terraform -chdir=infra/terraform apply \
 ```
 
 Then run the Ingestion CI workflow on `main` to publish the image. Once the
-image exists, plan and apply the full Terraform configuration:
+image exists, plan and apply the full Terraform configuration. This provisions
+the source bucket, queue, dead-letter queue, notifications, and Lambda event
+source mapping:
 
 ```bash
 terraform -chdir=infra/terraform init
@@ -211,8 +215,18 @@ terraform -chdir=infra/terraform plan
 terraform -chdir=infra/terraform apply
 ```
 
+Upload a supported document to the source bucket to start ingestion:
+
+```bash
+aws s3 cp ./document.pdf s3://$(terraform -chdir=infra/terraform output -raw ingestion_source_bucket_name)/document.pdf
+```
+
+Failed messages are retried up to five receives, then moved to the ingestion
+dead-letter queue. The Lambda returns partial batch failures so successfully
+processed messages in the same batch are not retried with a failed message.
+
 This requires AWS credentials with access to the Terraform state backend,
-ECR, Lambda, IAM, and Bedrock-related Terraform resources. The Lambda function
+ECR, Lambda, IAM, S3, SQS, and Bedrock-related Terraform resources. The Lambda function
 must use an image already present in the ECR repository.
 
 To run the production Compose services manually after images have been

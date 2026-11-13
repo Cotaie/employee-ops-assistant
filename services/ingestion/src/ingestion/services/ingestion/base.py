@@ -4,7 +4,7 @@ from datetime import datetime
 from clients.embeddings import EmbeddingsClient
 from contracts import EmbeddingsResponse
 
-from ingestion.integrations.storage import RDSVectorStoreStub, S3StorageStub
+from ingestion.integrations.storage import RDSVectorStoreStub
 from ingestion.services.chunking import ChunkingService
 from ingestion.services.document_loader import DocumentLoaderService
 from ingestion.services.normalization import NormalizationService
@@ -34,7 +34,6 @@ class IngestionServiceBase:
         embeddings_client: EmbeddingsClient | None = None,
         normalization_service: NormalizationService | None = None,
         chunking_profile_selector: ChunkingProfileSelector | None = None,
-        s3_storage: S3StorageStub | None = None,
         rds_vector_store: RDSVectorStoreStub | None = None,
     ) -> None:
         self._chunking_service = chunking_service or ChunkingService()
@@ -42,7 +41,6 @@ class IngestionServiceBase:
         self._embeddings_client = embeddings_client
         self._normalization_service = normalization_service or NormalizationService()
         self._chunking_profile_selector = chunking_profile_selector or ChunkingProfileSelector()
-        self._s3_storage = s3_storage
         self._rds_vector_store = rds_vector_store
 
     @property

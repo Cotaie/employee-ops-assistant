@@ -22,6 +22,7 @@ class DocumentLoaderService:
         content: str | None,
         content_type: str | None,
         source_uri: str | None,
+        local_path: Path | None = None,
     ) -> LoadedDocument:
         if content is not None:
             return LoadedDocument(
@@ -33,7 +34,7 @@ class DocumentLoaderService:
         if source_uri is None:
             raise ValueError("source_uri is required when direct content is not provided.")
 
-        document_path = self._resolve_document_path(source_uri)
+        document_path = local_path or self._resolve_document_path(source_uri)
         loader_name = self._select_loader_name(content_type, document_path)
         documents = self._load_documents(loader_name, document_path)
         text = self._combine_documents(documents)

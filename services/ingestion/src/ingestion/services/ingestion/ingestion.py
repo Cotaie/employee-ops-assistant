@@ -1,4 +1,5 @@
 from datetime import UTC, datetime
+from pathlib import Path
 from uuid import uuid4
 
 from contracts.document_ingestion import (
@@ -15,6 +16,8 @@ class IngestionService(IngestionServiceBase):
     async def ingest_document(
         self,
         payload: DocumentIngestionRequest,
+        *,
+        local_source_path: Path | None = None,
     ) -> DocumentIngestionResultResponse:
         now = datetime.now(UTC)
         document = StoredDocument(
@@ -30,12 +33,8 @@ class IngestionService(IngestionServiceBase):
             content=payload.content,
             content_type=payload.content_type,
             source_uri=payload.source_uri,
+            local_path=local_source_path,
         )
-        if self._s3_storage is not None and payload.content is not None:
-            await self._s3_storage.store_source(
-                document_id=document.document_id,
-                content=payload.content,
-            )
         normalized_text = self._normalization_service.normalize_text(loaded_document.text)
         profile = self._chunking_profile_selector.select_profile(
             content_type=payload.content_type,

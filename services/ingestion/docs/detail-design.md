@@ -2,13 +2,15 @@
 
 ## 1. Purpose
 
-The ingestion service runs as a direct-invocation Lambda. It loads and normalizes
-content, splits it into chunks, requests vectors from the embeddings Lambda,
-then passes source content and chunk records to S3 and RDS/pgvector storage
-adapters. Those two adapters are currently no-op stubs.
+The ingestion service runs as a Lambda triggered by SQS. S3 object-created
+notifications enqueue source object references; the Lambda downloads each object
+to temporary storage, loads and normalizes it, splits it into chunks, and
+requests vectors from the embeddings Lambda. The source remains in S3, while
+RDS/pgvector persistence remains a stub.
 
-The response retains the document identifier and processing counts. Durable
-document and vector persistence will be implemented by the S3 and RDS adapters.
+For direct synchronous invocation, the response retains the document identifier
+and processing counts. Durable chunk and vector persistence will be implemented
+by the RDS adapter.
 
 ## 2. Stored data
 
@@ -28,10 +30,18 @@ The RDS adapter is intended to store one record per chunk containing:
 - the embedding vector
 - `chunk_index` and the document fields above as metadata
 
-The Lambda currently supports ingestion requests only. Document listing,
+The Lambda currently supports ingestion only. Document listing,
 deletion, and metadata updates are outside this service's current contract.
 
 ## 3. Invocation contract
+
+### SQS-triggered ingestion
+
+S3 object-created notifications are sent to the ingestion SQS queue. Each queue
+message contains an S3 notification record. The handler downloads the named
+object from the configured source bucket and processes it. Failed queue
+messages are returned through Lambda's partial batch response and retried by
+SQS before moving to the dead-letter queue.
 
 ### Direct Lambda invocation
 
@@ -42,17 +52,19 @@ The event is a `DocumentIngestionRequest` object and must provide exactly one
 of direct `content` or `source_uri`. The handler returns a
 `DocumentIngestionResultResponse` object.
 
-Processing steps:
+Processing steps for direct invocation:
 
 1. load the supplied content
 2. normalize it
 3. select a chunking profile
 4. split it into chunks
 5. call the embeddings Lambda
-6. pass source content to the S3 adapter and chunks/vectors to the RDS adapter
+6. pass chunks/vectors to the RDS adapter
 7. return the document ID and processed record counts
 
 ## 4. Service integrations
 
 - the embeddings Lambda generates one vector for each chunk.
-- S3 and RDS/pgvector adapters are placeholders and currently perform no writes.
+- S3 reads the uploaded source object; it does not write back to the triggering
+  bucket, avoiding recursive object-created events.
+- RDS/pgvector persistence remains a placeholder.

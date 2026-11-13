@@ -4,7 +4,7 @@ import pytest
 from contracts import EmbeddingsResponse
 from contracts.document_ingestion import DocumentIngestionRequest
 
-from ingestion.integrations.storage import RDSVectorStoreStub, S3StorageStub
+from ingestion.integrations.storage import RDSVectorStoreStub
 from ingestion.services.chunking import ChunkingService
 from ingestion.services.document_loader import DocumentLoaderService
 from ingestion.services.ingestion import IngestionService
@@ -23,14 +23,6 @@ class FakeEmbeddingsClient:
             model="fake-model",
             dimensions=3,
         )
-
-
-class FakeS3Storage(S3StorageStub):
-    def __init__(self) -> None:
-        self.sources: list[tuple[str, str]] = []
-
-    async def store_source(self, *, document_id: str, content: str) -> None:
-        self.sources.append((document_id, content))
 
 
 class FakeRDSVectorStore(RDSVectorStoreStub):
@@ -52,7 +44,6 @@ def test_ingestion_service_uses_provided_collaborators() -> None:
     embeddings = FakeEmbeddingsClient()
     normalization = NormalizationService()
     selector = ChunkingProfileSelector()
-    s3_storage = FakeS3Storage()
     rds_store = FakeRDSVectorStore()
 
     service = IngestionService(
@@ -61,7 +52,6 @@ def test_ingestion_service_uses_provided_collaborators() -> None:
         embeddings_client=embeddings,
         normalization_service=normalization,
         chunking_profile_selector=selector,
-        s3_storage=s3_storage,
         rds_vector_store=rds_store,
     )
 
@@ -82,15 +72,13 @@ def test_ingestion_service_creates_default_processing_services() -> None:
 
 
 @pytest.mark.anyio
-async def test_ingest_document_runs_pipeline_and_calls_storage_adapters(
+async def test_ingest_document_runs_pipeline_and_calls_vector_store(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     embeddings = FakeEmbeddingsClient()
-    s3_storage = FakeS3Storage()
     rds_store = FakeRDSVectorStore()
     service = IngestionService(
         embeddings_client=embeddings,
-        s3_storage=s3_storage,
         rds_vector_store=rds_store,
     )
     payload = DocumentIngestionRequest(
@@ -117,7 +105,6 @@ async def test_ingest_document_runs_pipeline_and_calls_storage_adapters(
     assert response.chunk_count == 2
     assert response.embedding_count == 2
     assert embeddings.calls == [["chunk-1", "chunk-2"]]
-    assert s3_storage.sources == [(response.document_id, "Benefits text")]
     assert rds_store.calls == [
         (
             response.document_id,

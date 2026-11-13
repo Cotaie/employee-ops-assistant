@@ -1,26 +1,85 @@
-"""Direct-invocation AWS Lambda handler for document ingestion."""
+"""SQS-triggered AWS Lambda handler for document ingestion."""
 
 import asyncio
+import json
+import tempfile
+from pathlib import Path, PurePosixPath
 from typing import Any
+from urllib.parse import unquote_plus
 
-from contracts.document_ingestion import (
-    DocumentIngestionRequest,
-    DocumentIngestionResultResponse,
-)
+from contracts.document_ingestion import DocumentIngestionRequest
 
 from .integrations.embeddings import get_embeddings_client
-from .integrations.storage import RDSVectorStoreStub, S3StorageStub
+from .integrations.storage import RDSVectorStoreStub, S3Storage
+from .settings import get_settings
 from .services.ingestion import IngestionService
 
 
 def handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
-    """Validate one ingestion request and return its result as JSON data."""
+    """Process an SQS batch of S3 events, retaining direct request invocation."""
     del context
-    request = DocumentIngestionRequest.model_validate(event)
-    service = IngestionService(
+    records = event.get("Records")
+    if records is None:
+        request = DocumentIngestionRequest.model_validate(event)
+        response = asyncio.run(_get_ingestion_service().ingest_document(request))
+        return response.model_dump(mode="json")
+
+    batch_item_failures: list[dict[str, str]] = []
+    for record in records:
+        message_id = str(record.get("messageId", ""))
+        try:
+            _process_sqs_record(record)
+        except Exception:
+            batch_item_failures.append({"itemIdentifier": message_id})
+    return {"batchItemFailures": batch_item_failures}
+
+
+def _process_sqs_record(record: dict[str, Any]) -> None:
+    body = json.loads(record["body"])
+    notifications = body.get("Records")
+    if not isinstance(notifications, list) or not notifications:
+        raise ValueError("SQS message does not contain S3 notification records.")
+    for notification in notifications:
+        _process_s3_notification(notification)
+
+
+def _process_s3_notification(notification: dict[str, Any]) -> None:
+    settings = get_settings()
+    expected_bucket = settings.ingestion_s3_bucket_name
+    bucket = notification["s3"]["bucket"]["name"]
+    key = unquote_plus(notification["s3"]["object"]["key"])
+    if not expected_bucket:
+        raise RuntimeError("INGESTION_S3_BUCKET_NAME is not configured.")
+    if bucket != expected_bucket:
+        raise ValueError(f"Unexpected source bucket in S3 notification: {bucket}")
+    if not key:
+        raise ValueError("S3 notification contains an empty object key.")
+
+    source_uri = f"s3://{bucket}/{key}"
+    document_name = PurePosixPath(key).name
+    storage = S3Storage()
+    with tempfile.TemporaryDirectory(prefix="ingestion-") as temp_directory:
+        local_path = Path(temp_directory) / f"source{PurePosixPath(key).suffix}"
+        content_type = storage.download_source(
+            bucket=bucket,
+            key=key,
+            destination=local_path,
+        )
+        request = DocumentIngestionRequest(
+            document_name=document_name,
+            source_uri=source_uri,
+            content_type=content_type,
+        )
+        asyncio.run(
+            _get_ingestion_service().ingest_document(
+                request,
+                local_source_path=local_path,
+            )
+        )
+
+
+def _get_ingestion_service() -> IngestionService:
+    return IngestionService(
         embeddings_client=get_embeddings_client(),
-        s3_storage=S3StorageStub(),
         rds_vector_store=RDSVectorStoreStub(),
     )
-    response: DocumentIngestionResultResponse = asyncio.run(service.ingest_document(request))
-    return response.model_dump(mode="json")

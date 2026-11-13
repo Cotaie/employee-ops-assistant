@@ -42,6 +42,31 @@ resource "aws_iam_role_policy" "ingestion_lambda_embeddings" {
   })
 }
 
+resource "aws_iam_role_policy" "ingestion_lambda_sources" {
+  name = "read-ingestion-sources-and-sqs-messages"
+  role = aws_iam_role.ingestion_lambda_execution.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect   = "Allow"
+        Action   = ["s3:GetObject"]
+        Resource = "${aws_s3_bucket.ingestion_source.arn}/*"
+      },
+      {
+        Effect = "Allow"
+        Action = [
+          "sqs:ReceiveMessage",
+          "sqs:DeleteMessage",
+          "sqs:GetQueueAttributes",
+        ]
+        Resource = aws_sqs_queue.ingestion.arn
+      },
+    ]
+  })
+}
+
 resource "aws_ecr_repository_policy" "ingestion_lambda_image_access" {
   repository = aws_ecr_repository.ingestion.name
 
@@ -84,11 +109,14 @@ resource "aws_lambda_function" "ingestion" {
       EMBEDDINGS_LAMBDA_FUNCTION_NAME   = aws_lambda_function.embeddings.function_name
       EMBEDDINGS_LAMBDA_REGION          = "eu-central-1"
       EMBEDDINGS_LAMBDA_TIMEOUT_SECONDS = "300"
+      INGESTION_S3_BUCKET_NAME          = aws_s3_bucket.ingestion_source.id
+      INGESTION_S3_REGION               = "eu-central-1"
     }
   }
 
   depends_on = [
     aws_iam_role_policy.ingestion_lambda_embeddings,
+    aws_iam_role_policy.ingestion_lambda_sources,
     aws_ecr_repository_policy.ingestion_lambda_image_access,
   ]
 
