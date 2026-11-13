@@ -180,15 +180,30 @@ through the environment; do not use the local defaults for a deployed stack.
 ## AWS deployment status
 
 The EC2/CDK deployment has been retired. The CDK CloudFormation stacks and
-their resources have been deleted. Terraform owns the embeddings ECR repository
-and Lambda function, including its Bedrock execution permissions. The CI/CD
-workflows validate the service and publish the tested production image to ECR;
-Terraform applies that image to the Lambda function.
+their resources have been deleted. Terraform owns the embeddings and ingestion
+ECR repositories and Lambda functions, including their execution permissions.
+The CI/CD workflows validate both Lambda services and publish their tested
+production images to ECR; Terraform applies each image to its corresponding
+Lambda.
 
 After CI/CD publishes an image, Terraform automatically selects the most
-recently pushed image from the embeddings ECR repository and uses its digest
-for the Lambda deployment. A successful CI/CD image publish must exist before
-planning or applying the Lambda deployment:
+recently pushed image from each ECR repository and uses its digest for the
+Lambda deployment. Each repository must contain an image before planning or
+applying its Lambda.
+
+For the first ingestion deployment, bootstrap its ECR repository and GitHub
+publisher role before running the ingestion image workflow:
+
+```bash
+terraform -chdir=infra/terraform init
+terraform -chdir=infra/terraform apply \
+  -target=aws_ecr_repository.ingestion \
+  -target=aws_iam_role.github_ingestion_ecr_publisher \
+  -target=aws_iam_role_policy.github_ingestion_ecr_push
+```
+
+Then run the Ingestion CI workflow on `main` to publish the image. Once the
+image exists, plan and apply the full Terraform configuration:
 
 ```bash
 terraform -chdir=infra/terraform init

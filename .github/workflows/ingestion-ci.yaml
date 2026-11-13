@@ -1,0 +1,85 @@
+name: Ingestion CI
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - .github/workflows/ingestion-ci.yaml
+      - .github/workflows/ingestion-cd.yaml
+      - services/ingestion/**
+      - libs/clients/**
+      - libs/contracts/**
+      - .dockerignore
+  push:
+    branches:
+      - main
+      - feature/**
+    paths:
+      - .github/workflows/ingestion-ci.yaml
+      - .github/workflows/ingestion-cd.yaml
+      - services/ingestion/**
+      - libs/clients/**
+      - libs/contracts/**
+      - .dockerignore
+
+permissions:
+  contents: read
+
+jobs:
+  python-validation:
+    name: Validate ingestion service in Lambda runtime image
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+        with:
+          sparse-checkout-cone-mode: false
+          sparse-checkout: |
+            /.dockerignore
+            /services/ingestion/
+            /libs/clients/
+            /libs/contracts/
+
+      - name: Build test image
+        run: >-
+          docker build
+          --platform linux/amd64
+          --target test
+          --file services/ingestion/Dockerfile
+          --tag employee-ops/ingestion-test:latest
+          .
+
+      - name: Run ingestion checks in Lambda runtime image
+        run: docker run --rm employee-ops/ingestion-test:latest
+
+  container-build:
+    name: Build ingestion Lambda image
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    needs: python-validation
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+        with:
+          sparse-checkout-cone-mode: false
+          sparse-checkout: |
+            /.dockerignore
+            /services/ingestion/
+            /libs/clients/
+            /libs/contracts/
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build Lambda image
+        run: bash services/ingestion/scripts/build-image.sh "employee-ops/ingestion:${{ github.sha }}"
+
+      - name: Save production image
+        run: docker save --output ingestion-production.tar employee-ops/ingestion:${{ github.sha }}
+
+      - name: Upload production image artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ingestion-production
+          path: ingestion-production.tar
+          if-no-files-found: error

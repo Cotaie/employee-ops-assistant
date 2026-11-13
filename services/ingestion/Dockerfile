@@ -24,3 +24,20 @@ COPY libs/contracts/src ./libs/contracts/src
 COPY services/ingestion/src ./services/ingestion/src
 
 CMD ["ingestion.lambda_handler.handler"]
+
+# CI test image extends production with development dependencies and tests.
+FROM production AS test
+
+COPY --from=ghcr.io/astral-sh/uv:0.13.1 /uv /bin/uv
+COPY services/ingestion/pyproject.toml services/ingestion/uv.lock ./services/ingestion/
+COPY libs/clients/pyproject.toml ./libs/clients/pyproject.toml
+COPY libs/contracts/pyproject.toml ./libs/contracts/pyproject.toml
+COPY services/ingestion/tests ./services/ingestion/tests
+COPY services/ingestion/scripts/ci-check.sh ./services/ingestion/scripts/ci-check.sh
+
+WORKDIR ${LAMBDA_TASK_ROOT}/services/ingestion
+
+RUN uv sync --frozen --all-groups
+
+ENTRYPOINT ["/bin/bash"]
+CMD ["scripts/ci-check.sh"]
