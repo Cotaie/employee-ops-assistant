@@ -1,10 +1,3 @@
-data "aws_caller_identity" "current" {}
-
-data "aws_ecr_image" "embeddings_latest" {
-  repository_name = aws_ecr_repository.embeddings.name
-  most_recent     = true
-}
-
 resource "aws_iam_role" "embeddings_lambda_execution" {
   name        = "employee-ops-embeddings-lambda-execution"
   description = "Execution role for the Employee Ops embeddings Lambda."
@@ -28,11 +21,6 @@ resource "aws_iam_role" "embeddings_lambda_execution" {
   }
 }
 
-resource "aws_iam_role_policy_attachment" "embeddings_lambda_logging" {
-  role       = aws_iam_role.embeddings_lambda_execution.name
-  policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
-}
-
 resource "aws_iam_role_policy" "embeddings_lambda_bedrock" {
   name = "invoke-titan-embeddings-model"
   role = aws_iam_role.embeddings_lambda_execution.id
@@ -44,32 +32,6 @@ resource "aws_iam_role_policy" "embeddings_lambda_bedrock" {
         Effect   = "Allow"
         Action   = ["bedrock:InvokeModel"]
         Resource = "arn:aws:bedrock:eu-central-1::foundation-model/amazon.titan-embed-text-v2:0"
-      }
-    ]
-  })
-}
-
-resource "aws_ecr_repository_policy" "embeddings_lambda_image_access" {
-  repository = aws_ecr_repository.embeddings.name
-
-  policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = [
-      {
-        Sid    = "AllowLambdaToRetrieveEmbeddingsImage"
-        Effect = "Allow"
-        Principal = {
-          Service = "lambda.amazonaws.com"
-        }
-        Action = [
-          "ecr:BatchGetImage",
-          "ecr:GetDownloadUrlForLayer",
-        ]
-        Condition = {
-          ArnLike = {
-            "aws:sourceArn" = "arn:aws:lambda:eu-central-1:${data.aws_caller_identity.current.account_id}:function:employee-ops-embeddings"
-          }
-        }
       }
     ]
   })
@@ -96,7 +58,6 @@ resource "aws_lambda_function" "embeddings" {
   }
 
   depends_on = [
-    aws_iam_role_policy_attachment.embeddings_lambda_logging,
     aws_iam_role_policy.embeddings_lambda_bedrock,
     aws_ecr_repository_policy.embeddings_lambda_image_access,
   ]

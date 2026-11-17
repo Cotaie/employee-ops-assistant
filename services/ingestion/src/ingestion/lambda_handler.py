@@ -11,8 +11,8 @@ from contracts.document_ingestion import DocumentIngestionRequest
 
 from .integrations.embeddings import get_embeddings_client
 from .integrations.storage import RDSVectorStoreStub, S3Storage
-from .settings import get_settings
 from .services.ingestion import IngestionService
+from .settings import get_settings
 
 
 def handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
