@@ -7,6 +7,14 @@ resource "aws_s3_bucket" "ingestion_source" {
   }
 }
 
+resource "aws_s3_bucket_versioning" "ingestion_source" {
+  bucket = aws_s3_bucket.ingestion_source.id
+
+  versioning_configuration {
+    status = "Enabled"
+  }
+}
+
 resource "aws_s3_bucket_public_access_block" "ingestion_source" {
   bucket                  = aws_s3_bucket.ingestion_source.id
   block_public_acls       = true
@@ -93,7 +101,7 @@ resource "aws_s3_bucket_notification" "ingestion_source" {
 resource "aws_lambda_event_source_mapping" "ingestion_sqs" {
   event_source_arn = aws_sqs_queue.ingestion.arn
   function_name    = aws_lambda_function.ingestion.arn
-  batch_size       = 1
+  batch_size       = 5
   enabled          = true
 
   function_response_types = ["ReportBatchItemFailures"]

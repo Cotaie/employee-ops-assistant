@@ -28,10 +28,6 @@ class Settings(BaseSettings):
         alias="EMBEDDINGS_LAMBDA_TIMEOUT_SECONDS",
         gt=0,
     )
-    ingestion_s3_bucket_name: str | None = Field(
-        default=None,
-        alias="INGESTION_S3_BUCKET_NAME",
-    )
     ingestion_s3_region: str = Field(
         default="eu-central-1",
         alias="INGESTION_S3_REGION",

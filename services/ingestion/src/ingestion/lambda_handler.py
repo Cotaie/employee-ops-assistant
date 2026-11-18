@@ -12,25 +12,19 @@ from contracts.document_ingestion import DocumentIngestionRequest
 from .integrations.embeddings import get_embeddings_client
 from .integrations.storage import RDSVectorStoreStub, S3Storage
 from .services.ingestion import IngestionService
-from .settings import get_settings
 
 
-def handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
-    """Process an SQS batch of S3 events, retaining direct request invocation."""
+def handler(event: dict[str, Any], context: Any) -> dict[str, list[dict[str, str]]]:
+    """Process an SQS batch of S3 events."""
     del context
-    records = event.get("Records")
-    if records is None:
-        request = DocumentIngestionRequest.model_validate(event)
-        response = asyncio.run(_get_ingestion_service().ingest_document(request))
-        return response.model_dump(mode="json")
-
     batch_item_failures: list[dict[str, str]] = []
-    for record in records:
-        message_id = str(record.get("messageId", ""))
+    for record in event["Records"]:
+        message_id = str(record["messageId"])
         try:
             _process_sqs_record(record)
         except Exception:
             batch_item_failures.append({"itemIdentifier": message_id})
+
     return {"batchItemFailures": batch_item_failures}
 
 
@@ -44,14 +38,8 @@ def _process_sqs_record(record: dict[str, Any]) -> None:
 
 
 def _process_s3_notification(notification: dict[str, Any]) -> None:
-    settings = get_settings()
-    expected_bucket = settings.ingestion_s3_bucket_name
     bucket = notification["s3"]["bucket"]["name"]
     key = unquote_plus(notification["s3"]["object"]["key"])
-    if not expected_bucket:
-        raise RuntimeError("INGESTION_S3_BUCKET_NAME is not configured.")
-    if bucket != expected_bucket:
-        raise ValueError(f"Unexpected source bucket in S3 notification: {bucket}")
     if not key:
         raise ValueError("S3 notification contains an empty object key.")
 

@@ -78,7 +78,6 @@ resource "aws_lambda_function" "ingestion" {
       EMBEDDINGS_LAMBDA_FUNCTION_NAME   = aws_lambda_function.embeddings.function_name
       EMBEDDINGS_LAMBDA_REGION          = "eu-central-1"
       EMBEDDINGS_LAMBDA_TIMEOUT_SECONDS = "300"
-      INGESTION_S3_BUCKET_NAME          = aws_s3_bucket.ingestion_source.id
       INGESTION_S3_REGION               = "eu-central-1"
     }
   }
