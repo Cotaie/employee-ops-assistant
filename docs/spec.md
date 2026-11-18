@@ -2,7 +2,7 @@
 
 ## 1. Product Overview
 
-Employee Ops Assistant is a multi-agent enterprise chatbot for an automotive company. It helps employees get grounded answers about HR and workplace operations, retrieve their own employee-specific information, discuss or summarize uploaded files, and initiate common requests such as vacation requests or HR support tickets.
+Employee Ops Assistant is a multi-agent enterprise chatbot for an automotive company. It helps employees get grounded answers about HR and workplace operations, retrieve their own employee-specific information, upload documents to a persistent repository for later retrieval and discussion, and initiate common requests such as vacation requests or HR support tickets.
 
 ## 2. Problem
 
@@ -35,7 +35,7 @@ Provide one employee-facing assistant that can:
 
 - answer policy and process questions from company knowledge
 - retrieve employee-specific data and benefits information from enterprise systems
-- summarize or discuss uploaded files
+- upload documents to a persistent repository and retrieve, summarize, or discuss them later
 - start operational actions with confirmation
 - coordinate multiple AI agents behind the scenes
 
@@ -73,13 +73,13 @@ Examples:
 - Create an HR ticket for a payroll issue
 - Send a request to the appropriate support channel
 
-### 5.4 Uploaded File Questions
+### 5.4 Repository Document Questions
 
 Examples:
 
 - Summarize this uploaded policy document
-- Explain the main points of this uploaded PDF
-- Discuss the content of this uploaded spreadsheet with me
+- Find the leave policy document I uploaded earlier
+- Explain the main points of a repository PDF
 
 ### 5.5 Mixed Questions
 
@@ -97,9 +97,9 @@ The product must do more than return generic text answers. It must:
 
 - answer from company-approved knowledge
 - retrieve employee-specific information when needed
-- support discussion or summarization of uploaded files
-- use direct file context for smaller uploaded files and indexed retrieval for larger uploaded files
-- treat uploaded files as temporary data and delete them after use
+- retain uploaded documents in a repository for later requests
+- index repository documents for retrieval, while allowing direct file context during an upload request
+- preserve document versions and source references for grounded answers
 - support requests that may require more than one internal capability
 - ask for confirmation before side-effect actions
 

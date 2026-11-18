@@ -135,7 +135,7 @@ This collaboration is required to support mixed employee requests where one answ
 2. `AgentApi` selects the primary or fallback LLM path according to configuration and runtime availability.
 3. The orchestrator classifies the request as `knowledge_only`.
 4. `Knowledge Agent` calls `RetrievalApi`.
-5. `RetrievalApi` embeds the request text through the embeddings Lambda and returns relevant chunks from Chroma.
+5. `RetrievalApi` embeds the request text through the embeddings Lambda and returns relevant chunks from OpenSearch Serverless using hybrid keyword and vector search.
 6. `Knowledge Agent` produces a grounded response with citations.
 7. If the active conversation context exceeds the configured token threshold, `AgentApi` updates the conversation summary.
 8. `AgentApi` persists the interaction in the conversation store.
@@ -171,11 +171,12 @@ This collaboration is required to support mixed employee requests where one answ
 2. `AgentApi` selects the primary or fallback LLM path according to configuration and runtime availability.
 3. `AgentApi` inspects the file metadata and determines whether each file is below or above the configured direct-context threshold.
 4. Smaller files are passed directly into the active request context.
-5. Larger files are sent to the ingestion Lambda, embedded through the embeddings Lambda, stored for retrieval, and retrieved through `RetrievalApi`.
-6. The relevant agent or agents produce the summary or discussion response.
-7. If the active conversation context exceeds the configured token threshold, `AgentApi` updates the conversation summary.
-8. Any temporary uploaded-file artifacts that were created for the request are deleted after use.
-9. `AgentApi` persists the interaction in the conversation store and returns the final response.
+5. The original file is retained under the S3 `document_repository/` prefix. The S3 event sends its key and version through SQS to the ingestion Lambda.
+6. The ingestion Lambda records metadata and status in DynamoDB, extracts and chunks the document, obtains embeddings, and indexes chunks in OpenSearch Serverless.
+7. The relevant agent retrieves the new document through `RetrievalApi` for the current request or a later request.
+8. The relevant agent or agents produce the summary or discussion response.
+9. If the active conversation context exceeds the configured token threshold, `AgentApi` updates the conversation summary.
+10. `AgentApi` persists the interaction in the conversation store and returns the final response. The repository document and its indexed content remain available.
 
 ### 3.5 Leave Approval Notification Flow
 

@@ -188,6 +188,14 @@ The CI/CD workflows validate both Lambda services and publish their tested
 production images to ECR; Terraform applies each image to its corresponding
 Lambda.
 
+The target document-repository architecture extends this pipeline with an S3
+notification filter for the `document_repository/` prefix, a DynamoDB document
+catalog, and an OpenSearch Serverless hybrid-search index. These repository
+resources and adapters are documented as the next implementation phase; they
+are not yet provisioned or connected to the current Lambdas. Chroma remains in
+the local Compose retrieval path until that path is migrated or explicitly
+kept as a local-only alternative.
+
 After CI/CD publishes an image, Terraform automatically selects the most
 recently pushed image from each ECR repository and uses its digest for the
 Lambda deployment. Each repository must contain an image before planning or

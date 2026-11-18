@@ -2,24 +2,25 @@
 
 ## Purpose
 
-The ingestion Lambda accepts one `DocumentIngestionRequest`, prepares the
-document for retrieval, calls the embeddings Lambda, and returns a
-`DocumentIngestionResultResponse`.
+The ingestion Lambda consumes SQS batches containing S3 object-created
+notifications, prepares each repository document for retrieval, and reports
+failed SQS message IDs for retry.
 
 ## Invocation
 
-Invoke the Lambda directly through the AWS SDK with a JSON object matching
-`DocumentIngestionRequest`. Provide exactly one of `content` or `source_uri`.
-The handler validates the event and returns the response contract as JSON.
+S3 notifications for the `document_repository/` prefix are delivered through
+SQS. Each notification identifies the uploaded object's bucket, key, and S3
+version. The Lambda processes that object version. It does not list and process
+the full prefix for each invocation.
 
 ## Processing
 
-1. Load and normalize document content.
-2. Select a chunking profile and split the content.
-3. Generate one embedding per chunk through the embeddings Lambda.
-4. Store the source and vector records through the S3 and RDS/pgvector adapters.
-5. Return document identity and processing counts.
+1. Download the event's exact S3 object version and compute its SHA-256 hash.
+2. Claim or update the document version in DynamoDB; skip versions already indexed or currently being processed.
+3. Load and normalize document content, select a chunking profile, and split it into chunks.
+4. Generate one embedding per chunk through the embeddings Lambda.
+5. Store the chunks, embeddings, and retrieval metadata in OpenSearch Serverless using deterministic chunk IDs.
+6. Mark the catalog item indexed in DynamoDB only after indexing succeeds.
+7. Return failed SQS message IDs for records that could not be processed; SQS retries those messages.
 
-S3 and RDS/pgvector are currently represented by no-op stubs. SQS processing
-and infrastructure deployment are tracked separately in the ingestion
-conversion Epic.
+The optional business version is supplied by the repository upload workflow (for example, as S3 user metadata). It is distinct from the S3 `VersionId` and content hash.

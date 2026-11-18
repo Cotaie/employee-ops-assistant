@@ -10,8 +10,9 @@
 
 - accept a knowledge lookup request
 - embed the search text by calling the embeddings Lambda
-- perform vector similarity search in Chroma
-- return the top ranked chunks with source metadata
+- perform hybrid keyword and vector search in the production OpenSearch Serverless index
+- return the top ranked chunks with source metadata and document identifiers
+- enforce repository document visibility before returning matches
 
 ## 3. Suggested Endpoints
 
@@ -22,9 +23,13 @@ Input:
 - `query_text`
 - `top_k`
 - optional metadata filters
+- optional repository scope or visibility filters supported by authorization
 
 Output:
 
 - ranked chunks
 - source metadata
 - scores
+- document and chunk identifiers for citations and follow-up actions
+
+The query text is embedded through the embeddings Lambda. OpenSearch combines keyword and vector matches using a configured hybrid search pipeline. Local development may continue to use Chroma until its retrieval adapter is migrated.

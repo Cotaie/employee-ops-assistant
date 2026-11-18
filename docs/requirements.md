@@ -10,7 +10,7 @@ The product shall support:
 
 - policy and process question answering
 - employee-specific questions such as leave balance, status, and benefits access
-- uploaded-file summarization and discussion
+- document repository uploads, retrieval, summarization, and discussion
 - action requests such as vacation request initiation and HR ticket creation
 - mixed requests that combine knowledge lookup with employee-specific checks or actions
 
@@ -47,16 +47,19 @@ Acceptance criteria:
 - Before any side-effect action is executed, the system asks the employee for explicit confirmation.
 - After execution, the system returns the resulting status or failure reason.
 
-### FR-004 Uploaded File Handling
+### FR-004 Document Repository
 
-The system shall support uploaded files as an additional input for summarization and discussion.
+The system shall retain uploaded documents in a repository so employees can retrieve and discuss them in future requests.
 
 Acceptance criteria:
 
-- Given an uploaded file, the system can summarize or discuss its contents.
-- Given a smaller uploaded file, the system can analyze it directly from request context.
-- Given an uploaded file larger than the configured threshold, the system routes it through ingestion and retrieval before answering.
-- After the uploaded-file request is completed, the system deletes the uploaded file and any derived indexed content created only for that request.
+- An uploaded document is retained after the request that uploaded it has completed.
+- The system can retrieve relevant content from previously uploaded documents in later requests.
+- Answers based on repository documents include source references identifying the document and, when available, its business version and relevant section.
+- Each uploaded object version can be distinguished from other versions of the same S3 object.
+- The system records document metadata, including the S3 location, S3 object version, optional business version, content hash, and ingestion status.
+- A document may be analyzed directly in the upload request, but it is also indexed for later repository retrieval.
+- Repository removal and retention rules are explicit; completing an analysis request does not delete the document or its indexed content.
 
 ### FR-005 Mixed Request Handling
 
@@ -117,12 +120,22 @@ Acceptance criteria:
 - The system never executes a supported external action without confirmation.
 - If an action fails, the system reports the failure without claiming success.
 
-### NFR-004 Temporary File Lifecycle
+### NFR-004 Repository Retention And Consistency
 
-The system must treat employee-uploaded files as temporary data.
+The system must retain repository documents and keep their catalog metadata and retrieval index consistent with the retained source versions.
 
 Acceptance criteria:
 
-- Uploaded files are not retained as permanent enterprise knowledge.
-- If an uploaded file was indexed for retrieval, its chunks and embeddings are deleted after the request lifecycle completes.
-- Temporary uploaded-file metadata is retained only as long as needed to support the request and audit needs.
+- Uploaded repository documents and their S3 object versions are retained beyond the request lifecycle.
+- A document is reported as indexed only after its searchable chunks have been written successfully.
+- Failed indexing can be retried without creating duplicate chunks for the same source version.
+- Repository deletion removes or invalidates the relevant source version, catalog record, and indexed chunks according to an explicit deletion policy.
+
+### NFR-005 Repository Access Control
+
+The system must enforce the repository's document visibility policy during retrieval.
+
+Acceptance criteria:
+
+- Search results include only documents the requesting employee is authorized to access.
+- The visibility policy for employee-uploaded documents is defined before repository search is exposed to users.

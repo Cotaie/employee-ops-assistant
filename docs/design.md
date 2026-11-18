@@ -23,15 +23,20 @@ The design uses:
 - LangChain
 - LangGraph
 - Frappe HR as the HR system integration target
-- Chroma for vector storage and semantic retrieval
+- Amazon S3 for original repository documents and object versions
+- Amazon DynamoDB for the document catalog and ingestion state
+- Amazon OpenSearch Serverless for indexed chunks, embeddings, and hybrid retrieval
+- Chroma for local development retrieval until the local adapter is migrated
 - Redis shallow checkpoints for short-term chatbot conversation state
 
 Storage is intentionally split:
 
-- Chroma stores enterprise knowledge embeddings and oversized uploaded-file embeddings for semantic retrieval
-- Redis stores the latest LangGraph checkpoint for each active conversation thread
+- S3 is the source of truth for original repository files and their object versions.
+- DynamoDB is the source of truth for document catalog metadata and ingestion status.
+- OpenSearch Serverless is a derived search index for document chunks, embeddings, and retrieval metadata. It can be rebuilt from retained source documents.
+- Redis stores the latest LangGraph checkpoint for each active conversation thread.
 
-Uploaded employee files are temporary inputs. Any raw uploaded file and any derived indexed content created only for request-time analysis must be deleted after use.
+Uploaded repository documents persist after the request that uploaded them. Repository deletion and retention policies apply across S3, DynamoDB, and OpenSearch. Document visibility must be enforced by retrieval.
 
 Inactive conversation checkpoints expire after a configurable TTL. At approximately
 4,000 tokens, older conversation context is summarized while the latest five messages
@@ -53,7 +58,8 @@ remain intact. Durable long-term history is a deferred enhancement.
 - the system must use both LangChain and LangGraph
 - the system must include at least two real AI agents with distinct roles and tool access
 - the HR system used for employee-specific HR data and leave-related operations is Frappe HR
-- the vector store technology is Chroma
+- production retrieval uses OpenSearch Serverless with keyword and vector search
+- local development currently uses Chroma until a compatible local OpenSearch path is implemented
 - active chatbot threads retain their latest LangGraph checkpoint in Redis
 - the system supports a configurable primary LLM and configurable fallback LLM, each independently enableable or disableable
 
@@ -62,11 +68,11 @@ remain intact. Durable long-term history is a deferred enhancement.
 ### 4.1 Core Services
 
 - the ingestion Lambda
-  - ingests approved company documents and larger uploaded files
+  - ingests approved company documents and uploaded repository documents from S3
 - the embeddings Lambda
   - generates embeddings for knowledge chunks and retrieval text
 - `RetrievalApi`
-  - retrieves relevant enterprise knowledge and indexed uploaded-file content
+  - retrieves relevant repository content from OpenSearch Serverless
 - `AgentApi`
   - hosts orchestration, agents, and tool coordination
   - persists conversation state and message history

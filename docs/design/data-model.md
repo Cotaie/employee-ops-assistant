@@ -77,21 +77,19 @@ Model provider configuration must support:
 - fallback provider enabled/disabled
 - provider selection result recorded per request when relevant for observability
 
-Uploaded files selected for indexed analysis may also be tracked in relational metadata tables:
+Repository document metadata is held in DynamoDB. A catalog record represents a logical document and identifies its retained S3 object version. The record includes:
 
-- `uploaded_document`
-  - `uploaded_document_id`
-  - `conversation_id`
-  - `original_filename`
-  - `content_type`
-  - `size_bytes`
-  - `ingestion_mode`
-  - `deletion_status`
-  - `created_at`
+- `document_id`
+- original filename/title and content type
+- category and optional business version
+- S3 bucket, object key, and S3 `VersionId`
+- SHA-256 content hash
+- ingestion status and timestamps
+- repository visibility/access metadata, once the access policy is defined
 
 ## 4. Knowledge Storage
 
-The system uses persistent RAG for enterprise knowledge.
+The system uses persistent RAG for enterprise knowledge and repository documents.
 
 Approved company documents are:
 
@@ -111,12 +109,27 @@ Each chunk stores:
 - `text`
 - `embedding`
 
-Uploaded files that exceed the configured direct-context threshold are processed into the same chunk-and-embedding shape for indexed retrieval.
-Uploaded files and their derived indexed content are temporary and must be deleted after request-time use.
+Every repository upload is retained in S3 and indexed for future retrieval, regardless of whether its contents are also used directly during the upload request. S3 object versions distinguish revisions of the same object key. The business version is separate metadata supplied by the uploader or repository workflow. SHA-256 identifies the exact file contents.
+
+DynamoDB is authoritative for the document catalog and ingestion state. OpenSearch records contain a denormalized subset of the metadata needed to filter results and cite sources. OpenSearch is a rebuildable index, not the source of truth for the original file or catalog record.
 
 ## 5. Retrieval Model
 
-- retrieval is semantic and vector-based through Chroma
-- the first retrieval implementation returns the top relevant chunks with metadata
+- production retrieval uses OpenSearch Serverless hybrid keyword and vector search
+- the query embedding is generated through the embeddings Lambda
+- retrieval returns ranked chunks with source metadata for citations
 - final answers must cite the source title and relevant section when available
-- uploaded files smaller than the configured threshold may bypass retrieval and be analyzed directly in request context
+- smaller uploaded files may also be analyzed directly in the upload request, but remain indexed for future retrieval
+- the retrieval layer must apply the repository document visibility policy before returning results
+
+## 6. Repository lifecycle
+
+- S3 is configured for the `document_repository/` prefix and emits create notifications for objects under that prefix.
+- The ingestion handler processes the object and S3 `VersionId` identified by the notification rather than listing and re-reading the entire prefix.
+- Duplicate notifications for the same bucket, key, and S3 version must not create duplicate indexed chunks.
+- Repository deletion must coordinate the selected S3 object versions, DynamoDB catalog records, and OpenSearch chunks.
+- The policy for whether deleting a logical document also removes its historical S3 versions must be specified before implementing deletion.
+
+## 7. Open design question
+
+The visibility model for employee-uploaded repository documents is not yet defined. Retrieval must not expose documents across employees or groups until the intended shared/private access rules are decided.
