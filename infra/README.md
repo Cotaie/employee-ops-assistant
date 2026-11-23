@@ -188,13 +188,20 @@ The CI/CD workflows validate both Lambda services and publish their tested
 production images to ECR; Terraform applies each image to its corresponding
 Lambda.
 
-The target document-repository architecture extends this pipeline with an S3
+The document-repository architecture extends this pipeline with an S3
 notification filter for the `document_repository/` prefix, a DynamoDB document
-catalog, and an OpenSearch Serverless hybrid-search index. These repository
-resources and adapters are documented as the next implementation phase; they
-are not yet provisioned or connected to the current Lambdas. Chroma remains in
-the local Compose retrieval path until that path is migrated or explicitly
-kept as a local-only alternative.
+catalog, and an OpenSearch Serverless vector collection. Terraform now defines
+the DynamoDB table and OpenSearch collection, encryption and network policies,
+and write permissions for the ingestion Lambda. Apply Terraform to provision
+the OpenSearch resources. The ingestion code does not write to OpenSearch yet,
+and the retrieval API remains local-only on Chroma until its OpenSearch adapter
+and AWS runtime access are implemented.
+
+The collection endpoint is network reachable so the current non-VPC Lambda can
+connect; IAM `aoss:APIAccessAll` and a separate OpenSearch data access policy
+limit the ingestion role to creating and writing the `document-chunks` index.
+Standby replicas are disabled for this initial low-volume environment; enable
+them if the collection needs higher availability.
 
 After CI/CD publishes an image, Terraform automatically selects the most
 recently pushed image from each ECR repository and uses its digest for the

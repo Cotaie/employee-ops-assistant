@@ -103,6 +103,8 @@ resource "aws_lambda_function" "ingestion" {
       INGESTION_S3_REGION               = "eu-central-1"
       DOCUMENT_REPOSITORY_TABLE_NAME    = aws_dynamodb_table.document_repository.name
       DOCUMENT_REPOSITORY_REGION        = "eu-central-1"
+      OPENSEARCH_COLLECTION_ENDPOINT    = aws_opensearchserverless_collection.document_repository.collection_endpoint
+      OPENSEARCH_INDEX_NAME             = "document-chunks"
     }
   }
 
@@ -110,6 +112,8 @@ resource "aws_lambda_function" "ingestion" {
     aws_iam_role_policy.ingestion_lambda_embeddings,
     aws_iam_role_policy.ingestion_lambda_sources,
     aws_iam_role_policy.ingestion_lambda_document_catalog,
+    aws_iam_role_policy.ingestion_lambda_opensearch,
+    aws_opensearchserverless_access_policy.document_repository_ingestion,
     aws_ecr_repository_policy.ingestion_lambda_image_access,
   ]
 
