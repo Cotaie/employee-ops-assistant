@@ -1,13 +1,14 @@
 from types import SimpleNamespace
+from typing import Any
 
 import pytest
 from contracts import EmbeddingsResponse
 from contracts.document_ingestion import DocumentIngestionRequest
 
-from ingestion.integrations.storage import RDSVectorStoreStub
 from ingestion.services.chunking import ChunkingService
 from ingestion.services.document_loader import DocumentLoaderService
 from ingestion.services.ingestion import IngestionService
+from ingestion.services.ingestion.base import StoredDocument
 from ingestion.services.normalization import NormalizationService
 from ingestion.services.profile_selector import ChunkingProfileSelector
 
@@ -25,17 +26,34 @@ class FakeEmbeddingsClient:
         )
 
 
-class FakeRDSVectorStore(RDSVectorStoreStub):
+class FakeVectorStore:
     def __init__(self) -> None:
-        self.calls: list[tuple[str, list[dict[str, object]]]] = []
+        self.prepared: list[tuple[str, int]] = []
+        self.calls: list[dict[str, Any]] = []
 
-    async def store_chunks(
+    def prepare_document(self, *, source_id: str, dimensions: int) -> None:
+        self.prepared.append((source_id, dimensions))
+
+    def store_chunk_batch(
         self,
         *,
-        document_id: str,
-        chunks: list[dict[str, object]],
+        document: StoredDocument,
+        source_id: str,
+        source_metadata: dict[str, Any],
+        chunk_index_start: int,
+        chunks: list[str],
+        embeddings: list[list[float]],
     ) -> None:
-        self.calls.append((document_id, chunks))
+        self.calls.append(
+            {
+                "document_id": document.document_id,
+                "source_id": source_id,
+                "source_metadata": source_metadata,
+                "chunk_index_start": chunk_index_start,
+                "chunks": chunks,
+                "embeddings": embeddings,
+            }
+        )
 
 
 def test_ingestion_service_uses_provided_collaborators() -> None:
@@ -44,7 +62,7 @@ def test_ingestion_service_uses_provided_collaborators() -> None:
     embeddings = FakeEmbeddingsClient()
     normalization = NormalizationService()
     selector = ChunkingProfileSelector()
-    rds_store = FakeRDSVectorStore()
+    vector_store = FakeVectorStore()
 
     service = IngestionService(
         chunking_service=chunking,
@@ -52,7 +70,7 @@ def test_ingestion_service_uses_provided_collaborators() -> None:
         embeddings_client=embeddings,
         normalization_service=normalization,
         chunking_profile_selector=selector,
-        rds_vector_store=rds_store,
+        vector_store=vector_store,
     )
 
     assert service.chunking_service is chunking
@@ -76,10 +94,11 @@ async def test_ingest_document_runs_pipeline_and_calls_vector_store(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     embeddings = FakeEmbeddingsClient()
-    rds_store = FakeRDSVectorStore()
+    vector_store = FakeVectorStore()
     service = IngestionService(
         embeddings_client=embeddings,
-        rds_vector_store=rds_store,
+        vector_store=vector_store,
+        chunk_batch_size=1,
     )
     payload = DocumentIngestionRequest(
         document_name="Benefits Guide",
@@ -95,22 +114,37 @@ async def test_ingest_document_runs_pipeline_and_calls_vector_store(
     )
     monkeypatch.setattr(
         service.chunking_service,
-        "chunk_text",
-        lambda text, profile: ["chunk-1", "chunk-2"],
+        "iter_chunks",
+        lambda text, profile: iter(["chunk-1", "chunk-2"]),
     )
 
-    response = await service.ingest_document(payload)
+    response = await service.ingest_document(
+        payload,
+        source_id="source-1",
+        document_id="document-1",
+        source_metadata={"s3_key": "hr/benefits.pdf"},
+    )
 
-    assert response.document_id.startswith("doc_")
+    assert response.document_id == "document-1"
     assert response.chunk_count == 2
     assert response.embedding_count == 2
-    assert embeddings.calls == [["chunk-1", "chunk-2"]]
-    assert rds_store.calls == [
-        (
-            response.document_id,
-            [
-                {"text": "chunk-1", "embedding": [0.0, 0.0, 1.0], "chunk_index": 0},
-                {"text": "chunk-2", "embedding": [1.0, 0.0, 1.0], "chunk_index": 1},
-            ],
-        )
+    assert embeddings.calls == [["chunk-1"], ["chunk-2"]]
+    assert vector_store.prepared == [("source-1", 3)]
+    assert vector_store.calls == [
+        {
+            "document_id": "document-1",
+            "source_id": "source-1",
+            "source_metadata": {"s3_key": "hr/benefits.pdf"},
+            "chunk_index_start": 0,
+            "chunks": ["chunk-1"],
+            "embeddings": [[0.0, 0.0, 1.0]],
+        },
+        {
+            "document_id": "document-1",
+            "source_id": "source-1",
+            "source_metadata": {"s3_key": "hr/benefits.pdf"},
+            "chunk_index_start": 1,
+            "chunks": ["chunk-2"],
+            "embeddings": [[0.0, 0.0, 1.0]],
+        },
     ]

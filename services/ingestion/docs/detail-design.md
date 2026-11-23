@@ -1,9 +1,10 @@
 # Ingestion Lambda Detail Design
 
 > This document describes the target S3, DynamoDB, and OpenSearch design. The
-> current Lambda claims an item in DynamoDB before processing, then updates its
-> status and metadata after success or failure. OpenSearch indexing and the S3
-> prefix filter are not implemented yet.
+> current Lambda claims an item in DynamoDB before processing, writes chunk
+> text and embeddings to OpenSearch in bounded batches, and marks the item
+> indexed only after all writes succeed. The S3 prefix filter and retrieval
+> queries against OpenSearch are not implemented yet.
 
 ## 1. Purpose
 
@@ -30,15 +31,22 @@ Each logical document has:
 - `file_name`, `content_type` when available, and `business_version` when
   supplied as S3 user metadata named `business-version`
 - `content_sha256`, computed from the downloaded object bytes
-- `status`, currently `EMBEDDED`, plus `chunk_count`, `created_at`, and
-  `updated_at`
+- `status` (`PROCESSING`, `INDEXED`, or `FAILED`), plus `chunk_count`,
+  `embedding_count`, `created_at`, and `updated_at`
 
 The handler claims the item with status `PROCESSING` before downloading the
-object. A conditional claim skips an already active or embedded source version;
-failed items and processing claims older than 15 minutes can be reclaimed.
-Successful processing updates the item to `EMBEDDED`; errors update it to
-`FAILED` before the SQS message is returned for retry. The hash is recorded as
-metadata; ingestion does not skip re-embedding based on matching hashes.
+object. A conditional claim skips an active or indexed source version; failed,
+legacy `EMBEDDED`, and processing claims older than 15 minutes can be reclaimed.
+Successful processing updates the item to `INDEXED` only after OpenSearch
+accepts every chunk; errors update it to `FAILED` before SQS retries the
+message. The hash is recorded as metadata; ingestion does not skip re-embedding
+based on matching hashes.
+
+The chunker yields chunks incrementally. The service embeds and writes a batch
+of 16 chunks at a time to bound memory use. Vector-search collections use
+server-generated document IDs, so the adapter deletes existing chunks for the
+same `source_id` before a retry and writes refreshed batches. This avoids
+duplicate partial results when a prior attempt failed during indexing.
 
 The OpenSearch adapter stores one record per chunk containing:
 
@@ -57,7 +65,8 @@ deletion, and metadata updates are outside this service's current contract.
 S3 object-created notifications are sent to the ingestion SQS queue. Each
 queue message contains one or more S3 notification records. The handler
 downloads the exact key and S3 version named by each event, computes the
-content hash, processes it, and saves the resulting catalog item. Failed queue
+content hash, processes it, and writes chunk text and embeddings to OpenSearch.
+Failed queue
 messages are returned through Lambda's partial batch response and retried by
 SQS before moving to the dead-letter queue.
 
@@ -67,8 +76,8 @@ SQS before moving to the dead-letter queue.
 - S3 reads the uploaded source object; it does not write back to the triggering
   bucket, avoiding recursive object-created events.
 - DynamoDB stores metadata and the current processing status for each recorded
-  source version. `EMBEDDED` means text processing and embedding succeeded; it
-  does not mean chunks are indexed or retrievable yet.
+  source version. `INDEXED` means all chunks and embeddings were accepted by
+  OpenSearch.
 - OpenSearch Serverless stores a rebuildable retrieval index of chunks and embeddings.
 - The optional business version comes from upload metadata; the S3 `VersionId` and
   SHA-256 are technical identifiers and are stored separately.

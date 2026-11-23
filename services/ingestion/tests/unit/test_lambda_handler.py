@@ -14,7 +14,7 @@ class FakeCatalog:
         self.claimed = claimed
         self.calls = calls if calls is not None else []
         self.initial_item: dict[str, Any] | None = None
-        self.embedded: tuple[str, dict[str, Any]] | None = None
+        self.indexed: tuple[str, dict[str, Any]] | None = None
         self.failed: tuple[str, str] | None = None
 
     def claim_document_version(
@@ -30,9 +30,9 @@ class FakeCatalog:
         assert stale_before
         return self.claimed
 
-    def mark_embedded(self, source_id: str, attributes: dict[str, Any]) -> None:
-        self.calls.append("embedded")
-        self.embedded = (source_id, attributes)
+    def mark_indexed(self, source_id: str, attributes: dict[str, Any]) -> None:
+        self.calls.append("indexed")
+        self.indexed = (source_id, attributes)
 
     def mark_failed(self, source_id: str, error_type: str) -> None:
         self.calls.append("failed")
@@ -64,10 +64,21 @@ class FakeIngestionService:
         self.chunk_count = chunk_count
         self.embedding_count = embedding_count
 
-    async def ingest_document(self, request: Any, *, local_source_path: Path) -> Any:
+    async def ingest_document(
+        self,
+        request: Any,
+        *,
+        local_source_path: Path,
+        source_id: str,
+        document_id: str,
+        source_metadata: dict[str, Any],
+    ) -> Any:
         self.calls.append("ingest")
         assert request.document_version == "2026.1"
         assert local_source_path.parent.exists()
+        assert source_id
+        assert document_id
+        assert source_metadata["s3_version_id"] == "version-1"
         return SimpleNamespace(
             chunk_count=self.chunk_count,
             embedding_count=self.embedding_count,
@@ -93,7 +104,7 @@ def _downloaded_source() -> DownloadedSource:
     )
 
 
-def test_notification_claims_then_marks_embedded(
+def test_notification_claims_then_marks_indexed(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     calls: list[str] = []
@@ -107,13 +118,14 @@ def test_notification_claims_then_marks_embedded(
 
     lambda_handler._process_s3_notification(_notification())
 
-    assert calls == ["claim", "download", "ingest", "embedded"]
+    assert calls == ["claim", "download", "ingest", "indexed"]
     assert catalog.initial_item is not None
     assert catalog.initial_item["status"] == "PROCESSING"
-    assert catalog.embedded is not None
-    assert catalog.embedded[1] == {
+    assert catalog.indexed is not None
+    assert catalog.indexed[1] == {
         "content_sha256": "abc123",
         "chunk_count": 2,
+        "embedding_count": 2,
         "business_version": "2026.1",
         "content_type": "application/pdf",
     }
@@ -135,7 +147,7 @@ def test_duplicate_active_or_embedded_notification_is_skipped(
     lambda_handler._process_s3_notification(_notification())
 
     assert calls == ["claim"]
-    assert catalog.embedded is None
+    assert catalog.indexed is None
     assert catalog.failed is None
 
 
@@ -176,7 +188,7 @@ def test_missing_embeddings_mark_catalog_item_failed(
         lambda: FakeIngestionService(calls=calls, embedding_count=0),
     )
 
-    with pytest.raises(RuntimeError, match="every text chunk"):
+    with pytest.raises(RuntimeError, match="Every text chunk"):
         lambda_handler._process_s3_notification(_notification())
 
     assert calls == ["claim", "download", "ingest", "failed"]

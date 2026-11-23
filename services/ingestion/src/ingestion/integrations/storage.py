@@ -64,10 +64,3 @@ class S3Storage:
             user_metadata={str(key): str(value) for key, value in user_metadata.items()},
             content_sha256=content_hash.hexdigest(),
         )
-
-
-class RDSVectorStoreStub:
-    """Placeholder for storing document chunks and vectors in pgvector."""
-
-    async def store_chunks(self, *, document_id: str, chunks: list[dict[str, object]]) -> None:
-        del document_id, chunks

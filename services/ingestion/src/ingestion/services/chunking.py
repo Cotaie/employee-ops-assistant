@@ -1,3 +1,5 @@
+from collections.abc import Iterator
+
 from ingestion.services.profile_selector import ChunkingProfile
 
 
@@ -5,6 +7,10 @@ class ChunkingService:
     """Split text into overlapping character-based chunks."""
 
     def chunk_text(self, text: str, profile: ChunkingProfile) -> list[str]:
+        return list(self.iter_chunks(text, profile))
+
+    def iter_chunks(self, text: str, profile: ChunkingProfile) -> Iterator[str]:
+        """Yield text chunks one at a time to bound memory during ingestion."""
         self._validate_profile(profile)
 
         chunk_size = profile.chunk_size
@@ -13,9 +19,8 @@ class ChunkingService:
             raise ValueError("chunk_size must be greater than zero.")
         normalized = text.strip()
         if not normalized:
-            return []
+            return
 
-        chunks: list[str] = []
         start = 0
         text_length = len(normalized)
 
@@ -30,7 +35,7 @@ class ChunkingService:
 
             chunk = normalized[start:chunk_end].strip()
             if chunk:
-                chunks.append(chunk)
+                yield chunk
 
             if chunk_end >= text_length:
                 break
@@ -39,8 +44,6 @@ class ChunkingService:
             if next_start <= start:
                 next_start = chunk_end
             start = next_start
-
-        return chunks
 
     @staticmethod
     def _validate_profile(profile: ChunkingProfile) -> None:

@@ -105,6 +105,7 @@ resource "aws_lambda_function" "ingestion" {
       DOCUMENT_REPOSITORY_REGION        = "eu-central-1"
       OPENSEARCH_COLLECTION_ENDPOINT    = aws_opensearchserverless_collection.document_repository.collection_endpoint
       OPENSEARCH_INDEX_NAME             = "document-chunks"
+      OPENSEARCH_REGION                 = "eu-central-1"
     }
   }
 

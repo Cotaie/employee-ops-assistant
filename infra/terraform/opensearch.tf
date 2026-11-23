@@ -73,6 +73,7 @@ resource "aws_opensearchserverless_access_policy" "document_repository_ingestion
             "aoss:CreateIndex",
             "aoss:DescribeIndex",
             "aoss:UpdateIndex",
+            "aoss:DeleteDocument",
             "aoss:WriteDocument",
           ]
         }

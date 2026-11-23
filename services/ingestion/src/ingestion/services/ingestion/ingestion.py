@@ -1,5 +1,7 @@
 from datetime import UTC, datetime
+from itertools import batched
 from pathlib import Path
+from typing import Any
 from uuid import uuid4
 
 from contracts.document_ingestion import (
@@ -18,10 +20,13 @@ class IngestionService(IngestionServiceBase):
         payload: DocumentIngestionRequest,
         *,
         local_source_path: Path | None = None,
+        source_id: str | None = None,
+        document_id: str | None = None,
+        source_metadata: dict[str, Any] | None = None,
     ) -> DocumentIngestionResultResponse:
         now = datetime.now(UTC)
         document = StoredDocument(
-            document_id=f"doc_{uuid4().hex}",
+            document_id=document_id or f"doc_{uuid4().hex}",
             document_name=payload.document_name,
             document_version=payload.document_version,
             category=payload.category,
@@ -41,16 +46,47 @@ class IngestionService(IngestionServiceBase):
             source_uri=payload.source_uri,
             normalized_text=normalized_text,
         )
-        chunks = self._chunking_service.chunk_text(normalized_text, profile)
-        embeddings = await self._generate_embeddings_for_chunks(chunks)
+        stable_source_id = source_id or document.document_id
+        chunk_count = 0
+        embedding_count = 0
+        vector_index_prepared = False
+        chunk_iterator = self._chunking_service.iter_chunks(normalized_text, profile)
+        for chunk_batch in batched(chunk_iterator, self._chunk_batch_size):
+            chunks = list(chunk_batch)
+            embeddings = await self._generate_embeddings_for_chunks(chunks)
+            if len(embeddings.embeddings) != len(chunks):
+                raise RuntimeError("The embeddings service did not return one vector per chunk.")
+            if embeddings.dimensions <= 0 or any(
+                len(vector) != embeddings.dimensions for vector in embeddings.embeddings
+            ):
+                raise RuntimeError(
+                    "The embeddings service returned vectors with invalid dimensions."
+                )
 
-        document.chunk_count = len(chunks)
-        document.embedding_count = len(embeddings.embeddings)
-        await self._persist_chunks(
-            document=document,
-            chunks=chunks,
-            embeddings=embeddings,
-        )
+            if self._vector_store is not None:
+                if not vector_index_prepared:
+                    self._vector_store.prepare_document(
+                        source_id=stable_source_id,
+                        dimensions=embeddings.dimensions,
+                    )
+                    vector_index_prepared = True
+                self._vector_store.store_chunk_batch(
+                    document=document,
+                    source_id=stable_source_id,
+                    source_metadata=source_metadata or {},
+                    chunk_index_start=chunk_count,
+                    chunks=chunks,
+                    embeddings=embeddings.embeddings,
+                )
+
+            chunk_count += len(chunks)
+            embedding_count += len(embeddings.embeddings)
+
+        if chunk_count == 0:
+            raise ValueError("The document did not contain any text chunks to index.")
+
+        document.chunk_count = chunk_count
+        document.embedding_count = embedding_count
         return DocumentIngestionResultResponse(
             document_id=document.document_id,
             document_name=document.document_name,

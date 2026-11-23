@@ -52,12 +52,14 @@ class DocumentCatalog:
                     "REMOVE error_type"
                 ),
                 ConditionExpression=(
-                    "#status = :failed OR (#status = :processing AND updated_at < :stale_before)"
+                    "#status = :failed OR #status = :embedded OR "
+                    "(#status = :processing AND updated_at < :stale_before)"
                 ),
                 ExpressionAttributeNames={"#status": "status"},
                 ExpressionAttributeValues={
                     ":processing": "PROCESSING",
                     ":failed": "FAILED",
+                    ":embedded": "EMBEDDED",
                     ":now": now,
                     ":stale_before": stale_before,
                     ":zero": 0,
@@ -70,9 +72,9 @@ class DocumentCatalog:
             raise
         return True
 
-    def mark_embedded(self, source_id: str, attributes: dict[str, Any]) -> None:
-        """Record successful text processing and embedding."""
-        self._update_item(source_id, {**attributes, "status": "EMBEDDED"})
+    def mark_indexed(self, source_id: str, attributes: dict[str, Any]) -> None:
+        """Record that every chunk and embedding has been written to OpenSearch."""
+        self._update_item(source_id, {**attributes, "status": "INDEXED"})
 
     def mark_failed(self, source_id: str, error_type: str) -> None:
         """Make a failed source version eligible for a later retry."""

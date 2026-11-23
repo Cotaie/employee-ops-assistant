@@ -193,13 +193,15 @@ notification filter for the `document_repository/` prefix, a DynamoDB document
 catalog, and an OpenSearch Serverless vector collection. Terraform now defines
 the DynamoDB table and OpenSearch collection, encryption and network policies,
 and write permissions for the ingestion Lambda. Apply Terraform to provision
-the OpenSearch resources. The ingestion code does not write to OpenSearch yet,
-and the retrieval API remains local-only on Chroma until its OpenSearch adapter
-and AWS runtime access are implemented.
+the OpenSearch resources and activate the Lambda configuration. The ingestion
+code writes chunks and embeddings to OpenSearch in bounded batches; the
+retrieval API remains local-only on Chroma until its OpenSearch adapter and AWS
+runtime access are implemented.
 
 The collection endpoint is network reachable so the current non-VPC Lambda can
 connect; IAM `aoss:APIAccessAll` and a separate OpenSearch data access policy
-limit the ingestion role to creating and writing the `document-chunks` index.
+limit the ingestion role to creating, writing, and cleaning up documents in the
+`document-chunks` index.
 Standby replicas are disabled for this initial low-volume environment; enable
 them if the collection needs higher availability.
 

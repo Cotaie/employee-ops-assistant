@@ -64,7 +64,8 @@ def test_claim_document_version_reclaims_existing_failed_item() -> None:
         is True
     )
     assert table.update_calls[0]["ConditionExpression"] == (
-        "#status = :failed OR (#status = :processing AND updated_at < :stale_before)"
+        "#status = :failed OR #status = :embedded OR "
+        "(#status = :processing AND updated_at < :stale_before)"
     )
 
 
@@ -85,15 +86,15 @@ def test_claim_document_version_skips_active_or_completed_item() -> None:
     )
 
 
-def test_mark_embedded_updates_status_and_metadata() -> None:
+def test_mark_indexed_updates_status_and_metadata() -> None:
     table = FakeTable()
     catalog = DocumentCatalog(table=table)
 
-    catalog.mark_embedded("source-1", {"chunk_count": 2})
+    catalog.mark_indexed("source-1", {"chunk_count": 2})
 
     update = table.update_calls[0]
     assert update["Key"] == {"source_id": "source-1"}
-    assert update["ExpressionAttributeValues"][":value_status"] == "EMBEDDED"
+    assert update["ExpressionAttributeValues"][":value_status"] == "INDEXED"
     assert update["ExpressionAttributeValues"][":value_chunk_count"] == 2
 
 
@@ -105,6 +106,6 @@ def test_status_updates_preserve_conditional_item_existence(status: str) -> None
     if status == "FAILED":
         catalog.mark_failed("source-1", "ValueError")
     else:
-        catalog.mark_embedded("source-1", {})
+        catalog.mark_indexed("source-1", {})
 
     assert table.update_calls[0]["ConditionExpression"] == "attribute_exists(source_id)"

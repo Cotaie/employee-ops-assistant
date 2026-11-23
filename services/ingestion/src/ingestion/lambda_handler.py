@@ -13,7 +13,8 @@ from contracts.document_ingestion import DocumentIngestionRequest
 
 from .integrations.document_catalog import DocumentCatalog
 from .integrations.embeddings import get_embeddings_client
-from .integrations.storage import RDSVectorStoreStub, S3Storage
+from .integrations.opensearch import OpenSearchVectorStore
+from .integrations.storage import S3Storage
 from .services.ingestion import IngestionService
 
 PROCESSING_STALE_AFTER = timedelta(minutes=15)
@@ -102,20 +103,32 @@ def _process_s3_notification(notification: dict[str, Any]) -> None:
                 _get_ingestion_service().ingest_document(
                     request,
                     local_source_path=local_path,
+                    source_id=source_id,
+                    document_id=document_id,
+                    source_metadata={
+                        "s3_bucket": bucket,
+                        "s3_key": key,
+                        "s3_version_id": str(version_id),
+                        "content_sha256": downloaded_source.content_sha256,
+                        "file_name": document_name,
+                        "content_type": downloaded_source.content_type,
+                        "business_version": business_version,
+                    },
                 )
             )
             if result.chunk_count == 0 or result.embedding_count != result.chunk_count:
-                raise RuntimeError("Ingestion did not generate an embedding for every text chunk.")
+                raise RuntimeError("Every text chunk must have an embedding and an index write.")
 
             attributes: dict[str, Any] = {
                 "content_sha256": downloaded_source.content_sha256,
                 "chunk_count": result.chunk_count,
+                "embedding_count": result.embedding_count,
             }
             if business_version:
                 attributes["business_version"] = business_version
             if downloaded_source.content_type:
                 attributes["content_type"] = downloaded_source.content_type
-            catalog.mark_embedded(source_id, attributes)
+            catalog.mark_indexed(source_id, attributes)
     except Exception as error:
         catalog.mark_failed(source_id, type(error).__name__)
         raise
@@ -130,5 +143,5 @@ def _stable_id(*parts: str) -> str:
 def _get_ingestion_service() -> IngestionService:
     return IngestionService(
         embeddings_client=get_embeddings_client(),
-        rds_vector_store=RDSVectorStoreStub(),
+        vector_store=OpenSearchVectorStore(),
     )

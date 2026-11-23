@@ -40,6 +40,23 @@ class Settings(BaseSettings):
         default="eu-central-1",
         alias="DOCUMENT_REPOSITORY_REGION",
     )
+    opensearch_collection_endpoint: str | None = Field(
+        default=None,
+        alias="OPENSEARCH_COLLECTION_ENDPOINT",
+    )
+    opensearch_region: str = Field(
+        default="eu-central-1",
+        alias="OPENSEARCH_REGION",
+    )
+    opensearch_index_name: str = Field(
+        default="document-chunks",
+        alias="OPENSEARCH_INDEX_NAME",
+    )
+    ingestion_chunk_batch_size: int = Field(
+        default=16,
+        alias="INGESTION_CHUNK_BATCH_SIZE",
+        gt=0,
+    )
 
 
 def get_settings() -> Settings:
