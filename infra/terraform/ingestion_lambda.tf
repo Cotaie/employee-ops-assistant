@@ -62,6 +62,25 @@ resource "aws_iam_role_policy" "ingestion_lambda_sources" {
   })
 }
 
+resource "aws_iam_role_policy" "ingestion_lambda_document_catalog" {
+  name = "write-document-catalog"
+  role = aws_iam_role.ingestion_lambda_execution.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect = "Allow"
+        Action = [
+          "dynamodb:PutItem",
+          "dynamodb:UpdateItem",
+        ]
+        Resource = aws_dynamodb_table.document_repository.arn
+      }
+    ]
+  })
+}
+
 resource "aws_lambda_function" "ingestion" {
   function_name = "employee-ops-ingestion"
   description   = "Loads, chunks, and embeds documents for retrieval."
@@ -85,6 +104,7 @@ resource "aws_lambda_function" "ingestion" {
   depends_on = [
     aws_iam_role_policy.ingestion_lambda_embeddings,
     aws_iam_role_policy.ingestion_lambda_sources,
+    aws_iam_role_policy.ingestion_lambda_document_catalog,
     aws_ecr_repository_policy.ingestion_lambda_image_access,
   ]
 
