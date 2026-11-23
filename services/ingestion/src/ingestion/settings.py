@@ -32,6 +32,14 @@ class Settings(BaseSettings):
         default="eu-central-1",
         alias="INGESTION_S3_REGION",
     )
+    document_repository_table_name: str = Field(
+        default="employee-ops-document-catalog",
+        alias="DOCUMENT_REPOSITORY_TABLE_NAME",
+    )
+    document_repository_region: str = Field(
+        default="eu-central-1",
+        alias="DOCUMENT_REPOSITORY_REGION",
+    )
 
 
 def get_settings() -> Settings:

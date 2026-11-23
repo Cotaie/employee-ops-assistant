@@ -888,6 +888,7 @@ name = "ingestion"
 version = "0.1.0"
 source = { virtual = "." }
 dependencies = [
+    { name = "boto3" },
     { name = "clients" },
     { name = "contracts" },
     { name = "docx2txt" },
@@ -908,6 +909,7 @@ dev = [
 
 [package.metadata]
 requires-dist = [
+    { name = "boto3", specifier = ">=1.40,<2" },
     { name = "clients", directory = "../../libs/clients" },
     { name = "contracts", directory = "../../libs/contracts" },
     { name = "docx2txt", specifier = ">=0.8,<1.0" },

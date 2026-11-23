@@ -45,8 +45,11 @@ resource "aws_iam_role_policy" "ingestion_lambda_sources" {
     Version = "2012-10-17"
     Statement = [
       {
-        Effect   = "Allow"
-        Action   = ["s3:GetObject"]
+        Effect = "Allow"
+        Action = [
+          "s3:GetObject",
+          "s3:GetObjectVersion",
+        ]
         Resource = "${aws_s3_bucket.ingestion_source.arn}/*"
       },
       {
@@ -98,6 +101,8 @@ resource "aws_lambda_function" "ingestion" {
       EMBEDDINGS_LAMBDA_REGION          = "eu-central-1"
       EMBEDDINGS_LAMBDA_TIMEOUT_SECONDS = "300"
       INGESTION_S3_REGION               = "eu-central-1"
+      DOCUMENT_REPOSITORY_TABLE_NAME    = aws_dynamodb_table.document_repository.name
+      DOCUMENT_REPOSITORY_REGION        = "eu-central-1"
     }
   }
 
