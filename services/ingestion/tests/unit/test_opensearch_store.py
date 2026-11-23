@@ -24,14 +24,17 @@ class FakeIndices:
 class FakeOpenSearchClient:
     def __init__(self) -> None:
         self.indices = FakeIndices()
-        self.delete_calls: list[dict[str, Any]] = []
+        self.search_calls: list[dict[str, Any]] = []
+        self.search_responses: list[dict[str, Any]] = []
 
-    def delete_by_query(self, **kwargs: Any) -> dict[str, int]:
-        self.delete_calls.append(kwargs)
-        return {"deleted": 0}
+    def search(self, **kwargs: Any) -> dict[str, Any]:
+        self.search_calls.append(kwargs)
+        if self.search_responses:
+            return self.search_responses.pop(0)
+        return {"hits": {"hits": []}}
 
 
-def test_prepare_document_creates_index_and_clears_prior_chunks() -> None:
+def test_prepare_document_creates_index_and_searches_for_prior_chunks() -> None:
     client = FakeOpenSearchClient()
     store = OpenSearchVectorStore(client=client, index_name="document-chunks")
 
@@ -46,14 +49,48 @@ def test_prepare_document_creates_index_and_clears_prior_chunks() -> None:
         "space_type": "cosinesimil",
         "method": {"name": "hnsw", "engine": "faiss"},
     }
-    assert client.delete_calls == [
+    assert client.search_calls == [
         {
             "index": "document-chunks",
-            "body": {"query": {"term": {"source_id": "source-1"}}},
-            "refresh": True,
-            "conflicts": "proceed",
+            "body": {
+                "size": 500,
+                "_source": False,
+                "query": {"term": {"source_id": "source-1"}},
+            },
         }
     ]
+
+
+def test_prepare_document_deletes_prior_chunks_by_server_generated_id(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    client = FakeOpenSearchClient()
+    client.indices.exists_result = True
+    client.search_responses = [
+        {"hits": {"hits": [{"_id": "generated-1"}, {"_id": "generated-2"}]}},
+        {"hits": {"hits": []}},
+    ]
+    store = OpenSearchVectorStore(client=client, index_name="document-chunks")
+    bulk_calls: list[tuple[Any, list[dict[str, Any]], dict[str, Any]]] = []
+
+    def fake_bulk(
+        bulk_client: Any,
+        actions: list[dict[str, Any]],
+        **kwargs: Any,
+    ) -> tuple[int, list[Any]]:
+        bulk_calls.append((bulk_client, actions, kwargs))
+        return len(actions), []
+
+    monkeypatch.setattr(opensearch, "bulk", fake_bulk)
+
+    store.prepare_document(source_id="source-1", dimensions=1024)
+
+    _, actions, options = bulk_calls[0]
+    assert actions == [
+        {"_op_type": "delete", "_index": "document-chunks", "_id": "generated-1"},
+        {"_op_type": "delete", "_index": "document-chunks", "_id": "generated-2"},
+    ]
+    assert options["refresh"] is True
 
 
 def test_store_chunk_batch_uses_server_generated_ids(monkeypatch: pytest.MonkeyPatch) -> None:

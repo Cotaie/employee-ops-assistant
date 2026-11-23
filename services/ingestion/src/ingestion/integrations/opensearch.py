@@ -49,7 +49,7 @@ class OpenSearchVectorStore:
         self._index_name = index_name or settings.opensearch_index_name
 
     def prepare_document(self, *, source_id: str, dimensions: int) -> None:
-        """Ensure the vector index exists and remove prior partial writes for this source."""
+        """Ensure the vector index exists and remove prior writes for this source."""
         if not self._client.indices.exists(index=self._index_name):
             try:
                 self._client.indices.create(
@@ -60,12 +60,48 @@ class OpenSearchVectorStore:
                 if error.status_code not in (400, 409) or "already_exists" not in str(error):
                     raise
 
-        self._client.delete_by_query(
-            index=self._index_name,
-            body={"query": {"term": {"source_id": source_id}}},
-            refresh=True,
-            conflicts="proceed",
-        )
+        self._delete_source_documents(source_id)
+
+    def _delete_source_documents(self, source_id: str) -> None:
+        """Delete matching generated-ID documents in bounded batches.
+
+        OpenSearch Serverless vector collections reject custom IDs and do not
+        support delete-by-query. Search for the server-generated IDs, then use
+        the supported bulk delete-by-ID operation.
+        """
+        while True:
+            response = self._client.search(
+                index=self._index_name,
+                body={
+                    "size": 500,
+                    "_source": False,
+                    "query": {"term": {"source_id": source_id}},
+                },
+            )
+            hits = response.get("hits", {}).get("hits", [])
+            if not hits:
+                return
+
+            actions = [
+                {
+                    "_op_type": "delete",
+                    "_index": self._index_name,
+                    "_id": hit["_id"],
+                }
+                for hit in hits
+            ]
+            deleted, _ = bulk(
+                self._client,
+                actions,
+                raise_on_error=True,
+                refresh=True,
+                max_retries=3,
+                initial_backoff=1,
+                max_backoff=8,
+                retry_on_status=(429, 502, 503, 504),
+            )
+            if deleted != len(actions):
+                raise RuntimeError(f"OpenSearch deleted {deleted} of {len(actions)} prior chunks.")
 
     def store_chunk_batch(
         self,

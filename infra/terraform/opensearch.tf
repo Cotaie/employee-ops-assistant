@@ -54,7 +54,7 @@ resource "aws_opensearchserverless_collection" "document_repository" {
 resource "aws_opensearchserverless_access_policy" "document_repository_ingestion" {
   name        = "employee-ops-os-ingestion"
   type        = "data"
-  description = "Allow ingestion Lambda to create and write the document chunks index."
+  description = "Allow ingestion Lambda to create, query, and write the document chunks index."
 
   policy = jsonencode([
     {
@@ -72,8 +72,8 @@ resource "aws_opensearchserverless_access_policy" "document_repository_ingestion
           Permission = [
             "aoss:CreateIndex",
             "aoss:DescribeIndex",
+            "aoss:ReadDocument",
             "aoss:UpdateIndex",
-            "aoss:DeleteDocument",
             "aoss:WriteDocument",
           ]
         }
