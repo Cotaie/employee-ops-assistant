@@ -13,7 +13,7 @@ from contracts.document_ingestion import DocumentIngestionRequest
 
 from .integrations.document_catalog import DocumentCatalog
 from .integrations.embeddings import get_embeddings_client
-from .integrations.opensearch import OpenSearchVectorStore
+from .integrations.s3_vectors import S3VectorsStore
 from .integrations.storage import S3Storage
 from .services.ingestion import IngestionService
 
@@ -143,5 +143,5 @@ def _stable_id(*parts: str) -> str:
 def _get_ingestion_service() -> IngestionService:
     return IngestionService(
         embeddings_client=get_embeddings_client(),
-        vector_store=OpenSearchVectorStore(),
+        vector_store=S3VectorsStore(),
     )

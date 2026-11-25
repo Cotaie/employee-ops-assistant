@@ -188,22 +188,14 @@ The CI/CD workflows validate both Lambda services and publish their tested
 production images to ECR; Terraform applies each image to its corresponding
 Lambda.
 
-The document-repository architecture extends this pipeline with an S3
-notification filter for the `document_repository/` prefix, a DynamoDB document
-catalog, and an OpenSearch Serverless vector collection. Terraform now defines
-the DynamoDB table and OpenSearch collection, encryption and network policies,
-and write permissions for the ingestion Lambda. Apply Terraform to provision
-the OpenSearch resources and activate the Lambda configuration. The ingestion
-code writes chunks and embeddings to OpenSearch in bounded batches; the
-retrieval API remains local-only on Chroma until its OpenSearch adapter and AWS
-runtime access are implemented.
-
-The collection endpoint is network reachable so the current non-VPC Lambda can
-connect; IAM `aoss:APIAccessAll` and a separate OpenSearch data access policy
-limit the ingestion role to creating, writing, and cleaning up documents in the
-`document-chunks` index.
-Standby replicas are disabled for this initial low-volume environment; enable
-them if the collection needs higher availability.
+The document-repository architecture uses S3 for original files, DynamoDB for
+the document catalog, and S3 Vectors for chunk text and embeddings. Terraform
+defines the DynamoDB table, vector bucket and index, and scoped write permission
+for the ingestion Lambda. The ingestion code writes vectors in bounded batches
+with stable keys based on the source version and chunk number, so retries
+overwrite the same vectors. The retrieval API remains local-only on Chroma until
+its S3 Vectors adapter and AWS runtime permissions are implemented. S3 Vectors
+does not require a provisioned collection endpoint or standby replicas.
 
 After CI/CD publishes an image, Terraform automatically selects the most
 recently pushed image from each ECR repository and uses its digest for the

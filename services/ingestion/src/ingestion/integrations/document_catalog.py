@@ -73,7 +73,7 @@ class DocumentCatalog:
         return True
 
     def mark_indexed(self, source_id: str, attributes: dict[str, Any]) -> None:
-        """Record that every chunk and embedding has been written to OpenSearch."""
+        """Record that every chunk and embedding has been written to the vector index."""
         self._update_item(source_id, {**attributes, "status": "INDEXED"})
 
     def mark_failed(self, source_id: str, error_type: str) -> None:

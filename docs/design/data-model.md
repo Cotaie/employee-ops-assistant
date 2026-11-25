@@ -111,11 +111,11 @@ Each chunk stores:
 
 Every repository upload is retained in S3 and indexed for future retrieval, regardless of whether its contents are also used directly during the upload request. S3 object versions distinguish revisions of the same object key. The business version is separate metadata supplied by the uploader or repository workflow. SHA-256 identifies the exact file contents.
 
-DynamoDB is authoritative for the document catalog and ingestion state. OpenSearch records contain a denormalized subset of the metadata needed to filter results and cite sources. OpenSearch is a rebuildable index, not the source of truth for the original file or catalog record.
+DynamoDB is authoritative for the document catalog and ingestion state. S3 Vectors records contain a denormalized subset of the metadata needed to filter results and cite sources, as well as each chunk's text and embedding. S3 Vectors is a rebuildable index, not the source of truth for the original file or catalog record.
 
 ## 5. Retrieval Model
 
-- production retrieval uses OpenSearch Serverless hybrid keyword and vector search
+- production ingestion stores vectors and chunk text in S3 Vectors; the retrieval adapter is not yet implemented
 - the query embedding is generated through the embeddings Lambda
 - retrieval returns ranked chunks with source metadata for citations
 - final answers must cite the source title and relevant section when available
@@ -127,7 +127,7 @@ DynamoDB is authoritative for the document catalog and ingestion state. OpenSear
 - S3 is configured for the `document_repository/` prefix and emits create notifications for objects under that prefix.
 - The ingestion handler processes the object and S3 `VersionId` identified by the notification rather than listing and re-reading the entire prefix.
 - Duplicate notifications for the same bucket, key, and S3 version must not create duplicate indexed chunks.
-- Repository deletion must coordinate the selected S3 object versions, DynamoDB catalog records, and OpenSearch chunks.
+- Repository deletion must coordinate the selected S3 object versions, DynamoDB catalog records, and S3 Vectors chunks.
 - The policy for whether deleting a logical document also removes its historical S3 versions must be specified before implementing deletion.
 
 ## 7. Open design question

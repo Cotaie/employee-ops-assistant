@@ -25,7 +25,7 @@ The design uses:
 - Frappe HR as the HR system integration target
 - Amazon S3 for original repository documents and object versions
 - Amazon DynamoDB for the document catalog and ingestion state
-- Amazon OpenSearch Serverless for indexed chunks, embeddings, and hybrid retrieval
+- Amazon S3 Vectors for indexed chunks, embeddings, and similarity retrieval
 - Chroma for local development retrieval until the local adapter is migrated
 - Redis shallow checkpoints for short-term chatbot conversation state
 
@@ -33,10 +33,10 @@ Storage is intentionally split:
 
 - S3 is the source of truth for original repository files and their object versions.
 - DynamoDB is the source of truth for document catalog metadata and ingestion status.
-- OpenSearch Serverless is a derived search index for document chunks, embeddings, and retrieval metadata. It can be rebuilt from retained source documents.
+- S3 Vectors is a derived index for document chunks, embeddings, and retrieval metadata. It can be rebuilt from retained source documents.
 - Redis stores the latest LangGraph checkpoint for each active conversation thread.
 
-Uploaded repository documents persist after the request that uploaded them. Repository deletion and retention policies apply across S3, DynamoDB, and OpenSearch. Document visibility must be enforced by retrieval.
+Uploaded repository documents persist after the request that uploaded them. Repository deletion and retention policies apply across S3, DynamoDB, and S3 Vectors. Document visibility must be enforced by retrieval.
 
 Inactive conversation checkpoints expire after a configurable TTL. At approximately
 4,000 tokens, older conversation context is summarized while the latest five messages
@@ -58,8 +58,8 @@ remain intact. Durable long-term history is a deferred enhancement.
 - the system must use both LangChain and LangGraph
 - the system must include at least two real AI agents with distinct roles and tool access
 - the HR system used for employee-specific HR data and leave-related operations is Frappe HR
-- production retrieval uses OpenSearch Serverless with keyword and vector search
-- local development currently uses Chroma until a compatible local OpenSearch path is implemented
+- production document ingestion writes chunks and embeddings to S3 Vectors
+- local development currently uses Chroma; production retrieval integration remains to be implemented
 - active chatbot threads retain their latest LangGraph checkpoint in Redis
 - the system supports a configurable primary LLM and configurable fallback LLM, each independently enableable or disableable
 
@@ -72,7 +72,7 @@ remain intact. Durable long-term history is a deferred enhancement.
 - the embeddings Lambda
   - generates embeddings for knowledge chunks and retrieval text
 - `RetrievalApi`
-  - retrieves relevant repository content from OpenSearch Serverless
+  - will retrieve relevant repository content from S3 Vectors
 - `AgentApi`
   - hosts orchestration, agents, and tool coordination
   - persists conversation state and message history

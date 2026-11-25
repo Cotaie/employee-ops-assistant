@@ -1,10 +1,10 @@
 # Ingestion Lambda Detail Design
 
-> This document describes the target S3, DynamoDB, and OpenSearch design. The
+> This document describes the S3, DynamoDB, and S3 Vectors design. The
 > current Lambda claims an item in DynamoDB before processing, writes chunk
-> text and embeddings to OpenSearch in bounded batches, and marks the item
+> text and embeddings to S3 Vectors in bounded batches, and marks the item
 > indexed only after all writes succeed. The S3 prefix filter and retrieval
-> queries against OpenSearch are not implemented yet.
+> queries against S3 Vectors are not implemented yet.
 
 ## 1. Purpose
 
@@ -13,7 +13,7 @@ notifications enqueue source object references; the Lambda downloads the exact
 object version to temporary processing storage, loads and normalizes it, splits
 it into chunks, and requests vectors from the embeddings Lambda. The original
 document is retained in S3 under the `document_repository/` prefix. DynamoDB is
-the catalog for document metadata and ingestion state; OpenSearch Serverless
+the catalog for document metadata and ingestion state; S3 Vectors
 stores searchable chunks, vectors, and retrieval metadata.
 
 This Lambda is SQS-triggered. The handler supports SQS events only and returns
@@ -37,20 +37,21 @@ Each logical document has:
 The handler claims the item with status `PROCESSING` before downloading the
 object. A conditional claim skips an active or indexed source version; failed,
 legacy `EMBEDDED`, and processing claims older than 15 minutes can be reclaimed.
-Successful processing updates the item to `INDEXED` only after OpenSearch
+Successful processing updates the item to `INDEXED` only after S3 Vectors
 accepts every chunk; errors update it to `FAILED` before SQS retries the
 message. The hash is recorded as metadata; ingestion does not skip re-embedding
 based on matching hashes.
 
 The chunker yields chunks incrementally. The service embeds and writes a batch
-of 16 chunks at a time to bound memory use. Vector-search collections use
-server-generated document IDs, so the adapter deletes existing chunks for the
-same `source_id` before a retry and writes refreshed batches. This avoids
-duplicate partial results when a prior attempt failed during indexing.
+of 16 chunks at a time to bound memory use. Each vector key is derived from the
+stable `source_id` and zero-based chunk number. S3 Vectors replaces a vector
+when a `PutVectors` request uses an existing key, so a retry for the same S3
+object version overwrites the same chunk vectors. Different S3 object versions
+have different `source_id` values and remain separately indexed.
 
-The OpenSearch adapter stores one record per chunk containing:
+The S3 Vectors adapter stores one vector per chunk containing:
 
-- an ID formatted as `{document_id}:chunk:{chunk_index}`
+- a key formatted as `{source_id}#{chunk_index}`
 - the chunk text
 - the embedding vector
 - `chunk_index` and the document fields above as searchable metadata
@@ -65,7 +66,7 @@ deletion, and metadata updates are outside this service's current contract.
 S3 object-created notifications are sent to the ingestion SQS queue. Each
 queue message contains one or more S3 notification records. The handler
 downloads the exact key and S3 version named by each event, computes the
-content hash, processes it, and writes chunk text and embeddings to OpenSearch.
+content hash, processes it, and writes chunk text and embeddings to S3 Vectors.
 Failed queue
 messages are returned through Lambda's partial batch response and retried by
 SQS before moving to the dead-letter queue.
@@ -77,7 +78,7 @@ SQS before moving to the dead-letter queue.
   bucket, avoiding recursive object-created events.
 - DynamoDB stores metadata and the current processing status for each recorded
   source version. `INDEXED` means all chunks and embeddings were accepted by
-  OpenSearch.
-- OpenSearch Serverless stores a rebuildable retrieval index of chunks and embeddings.
+  S3 Vectors.
+- S3 Vectors stores a rebuildable retrieval index of chunks and embeddings.
 - The optional business version comes from upload metadata; the S3 `VersionId` and
   SHA-256 are technical identifiers and are stored separately.

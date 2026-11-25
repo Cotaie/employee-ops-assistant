@@ -19,7 +19,7 @@ the full prefix for each invocation.
 2. Claim or update the document version in DynamoDB; skip versions already indexed or currently being processed.
 3. Load and normalize document content, select a chunking profile, and split it into chunks.
 4. Generate one embedding per chunk through the embeddings Lambda.
-5. Store the chunks, embeddings, and retrieval metadata in OpenSearch Serverless using deterministic chunk IDs.
+5. Store the chunks, embeddings, and retrieval metadata in S3 Vectors using deterministic vector keys based on the S3 source version and chunk number.
 6. Mark the catalog item indexed in DynamoDB only after indexing succeeds.
 7. Return failed SQS message IDs for records that could not be processed; SQS retries those messages.
 
