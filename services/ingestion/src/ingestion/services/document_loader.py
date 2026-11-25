@@ -65,7 +65,7 @@ class DocumentLoaderService:
     @staticmethod
     def _select_loader_name(content_type: str | None, document_path: Path) -> str:
         if content_type == "text/markdown" or document_path.suffix.lower() == ".md":
-            return "UnstructuredMarkdownLoader"
+            return "TextLoader"
         if content_type == "application/pdf" or document_path.suffix.lower() == ".pdf":
             return "PyPDFLoader"
         if document_path.suffix.lower() == ".docx":
@@ -89,7 +89,6 @@ class DocumentLoaderService:
                 Docx2txtLoader,
                 PyPDFLoader,
                 TextLoader,
-                UnstructuredMarkdownLoader,
             )
         except ImportError as exc:
             raise RuntimeError(
@@ -100,7 +99,6 @@ class DocumentLoaderService:
             "Docx2txtLoader": Docx2txtLoader,
             "PyPDFLoader": PyPDFLoader,
             "TextLoader": TextLoader,
-            "UnstructuredMarkdownLoader": UnstructuredMarkdownLoader,
         }
         return loaders[loader_name]
 

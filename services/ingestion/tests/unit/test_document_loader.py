@@ -40,7 +40,7 @@ def test_load_document_returns_direct_content_without_loader() -> None:
     )
 
 
-def test_load_document_uses_markdown_loader_for_markdown_file(
+def test_load_document_uses_text_loader_for_markdown_file(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     service = DocumentLoaderService()
@@ -64,12 +64,27 @@ def test_load_document_uses_markdown_loader_for_markdown_file(
     )
 
     assert loader_calls == {
-        "loader_name": "UnstructuredMarkdownLoader",
+        "loader_name": "TextLoader",
         "path": "/tmp/test-document.md",
     }
     assert loaded.text == "## Heading\n\nBody"
-    assert loaded.loader_name == "UnstructuredMarkdownLoader"
+    assert loaded.loader_name == "TextLoader"
     assert loaded.metadata["document_count"] == 1
+
+
+def test_markdown_text_loader_does_not_require_network(tmp_path: Path) -> None:
+    document_path = tmp_path / "policy.md"
+    document_path.write_text("# Vacation policy\n\nEmployees receive 25 days.", encoding="utf-8")
+
+    loaded = DocumentLoaderService().load_document(
+        content=None,
+        content_type="text/markdown",
+        source_uri=f"s3://repository/{document_path.name}",
+        local_path=document_path,
+    )
+
+    assert loaded.loader_name == "TextLoader"
+    assert loaded.text == "# Vacation policy\n\nEmployees receive 25 days."
 
 
 def test_load_document_combines_multiple_loaded_documents(monkeypatch: pytest.MonkeyPatch) -> None:
